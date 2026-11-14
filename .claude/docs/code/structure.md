@@ -5,6 +5,7 @@ index.html                         structure de la page (en-tête, catalogue, zo
 assets/                            tout ce que la page charge
   app.js                           toute la logique (IIFE, script classique, sans module)
   style.css                        tous les styles, variables de thème comprises
+  favicon.svg, favicon-32.png      icône d'onglet (SVG, PNG 32 px en secours pour les navigateurs sans SVG)
   data.json                        données du jeu, générées par scripts/build_data.py
   images/items/<Item>.png          168 icônes d'objets (64 px), nom = classe de l'objet (Desc_IronPlate_C.png)
   images/machines/<Build>.png      11 icônes de machines (Build_ConstructorMk1_C.png…)

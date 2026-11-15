@@ -33,6 +33,7 @@ npm test
 | 5 usines, à 390 px | « + » grisé avec l'infobulle « Maximum de 5 usines atteint… », un clic n'ouvre pas de fenêtre (toast) ; « + Nouvelle usine » grisé dans la fenêtre d'ajout ; aucun débordement |
 | Lien `#usine:AluminumIngot*60` avec une usine existante | « Ouvrir dans une nouvelle usine » : usines 1 (Plaque de fer) et 2 (Lingot d'aluminium) ; en choisissant l'usine 1 : « Remplacer l'usine 1 », une seule usine |
 | Transport, Ressources de Mon usine, usines 1 (plaque de fer 20/min) et 2 (lingot d'aluminium 60/min) | usine 1 : Minerai de fer ; usine 2 : Bauxite, Eau, Charbon, Quartz brut ; le train choisi pour le minerai reste dans l'usine 1 seulement |
+| « + » du catalogue (Barre de fer) | survol du bouton, autre ligne, retour sur la ligne : fond normal, pas la couleur de survol ; fenêtre ouverte puis Annuler, pointeur sur une autre ligne : bouton caché |
 | Les trois vues à 390 px | aucun défilement horizontal |
 | Toutes les pages testées | aucune ressource en erreur HTTP (404…) ni échec réseau |
 | Icônes référencées par `data.json` (`ico`) et `machines` | fichier présent dans `assets/images/` |

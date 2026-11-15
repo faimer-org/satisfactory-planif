@@ -1652,10 +1652,12 @@ document.addEventListener("click", (e) => {
 const modal = document.createElement("div");
 modal.id = "modal"; modal.hidden = true;
 document.body.appendChild(modal);
-let modalBack = null;
+let modalBack = null, modalByPointer = false, lastPointer = false;
+document.addEventListener("pointerdown", () => { lastPointer = true; }, true);
+document.addEventListener("keydown", () => { lastPointer = false; }, true);
 function openModal({ title, body, actions, inline, cancel = "Annuler" }) {
   hideTip(); closeMenu(false);
-  modalBack = document.activeElement;
+  modalBack = document.activeElement; modalByPointer = lastPointer;
   modal.innerHTML = `<div class="mback" data-mclose="1"></div><div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mtitle">
     <h3 id="mtitle">${esc(title)}</h3><div class="mbody">${body}</div>
     <div class="mactions${inline ? " row" : ""}">${inline ? `<button class="btn mbtn" data-mclose="1">${esc(cancel)}</button>` : ""}${actions.map((a, i) => `<button class="btn mbtn ${a.kind || ""}" data-maction="${i}"${a.disabled ? " disabled" : ""}>${esc(a.label)}${a.hint ? `<small>${esc(a.hint)}</small>` : ""}</button>`).join("")}
@@ -1666,7 +1668,9 @@ function openModal({ title, body, actions, inline, cancel = "Annuler" }) {
 }
 function closeModal() {
   modal.hidden = true; modal.innerHTML = "";
-  if (modalBack && modalBack.isConnected) modalBack.focus();
+  // a catalogue "+" shows only while its row is hovered or it has the keyboard focus: opened with the mouse, focusing it
+  // again would leave it shown (Échap gives it :focus-visible) once the pointer is elsewhere
+  if (modalBack && modalBack.isConnected && !(modalByPointer && modalBack.classList.contains("padd"))) modalBack.focus();
 }
 modal.addEventListener("click", (e) => {
   const a = e.target.closest("[data-maction]");

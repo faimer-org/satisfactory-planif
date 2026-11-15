@@ -273,8 +273,10 @@ tr.flash > td { animation: rowFlash 1.6s ease-out; }
 .pickrow { display: flex; align-items: center; gap: 4px; }
 .pickrow .pick { flex: 1; min-width: 0; }
 .padd { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--rust); background: var(--surface); color: var(--rust); line-height: 0; display: grid; place-items: center; padding: 0; cursor: pointer; opacity: 0; }
-.pickrow:hover .padd, .pickrow:focus-within .padd { opacity: 1; }
+.pickrow:hover .padd, .pickrow:has(:focus-visible) .padd { opacity: 1; }
 .padd:hover { background: var(--rust); color: var(--rust-ink); }
+.pickrow .padd { transition: opacity .12s; }   /* colours change at once: hidden while still fading from hover, it came back dark */
+@media (prefers-reduced-motion: reduce) { .pickrow .padd { transition: none; } }
 @media (hover: none) { .padd { opacity: 1; } }
 #toast { position: fixed; z-index: 90; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 32px); background: var(--tip-bg); color: var(--tip-fg); border: 1px solid var(--tip-border); border-radius: 8px; padding: 10px 14px; box-shadow: 0 8px 24px var(--tip-shadow); font-size: 15px; }
 #toast[hidden] { display: none; }
@@ -422,8 +424,8 @@ sup.fn { color: var(--rust); font: 600 12px/0 var(--mono); margin-left: 1px; }
 .fbtn.fadd { color: var(--rust); border-color: var(--rust); padding: 6px 10px; }
 .fbtn[aria-disabled="true"], .fbtn[aria-disabled="true"]:hover { opacity: .4; cursor: not-allowed; filter: grayscale(.5); border-color: var(--line); color: var(--muted); }
 .fact { display: flex; flex-wrap: wrap; gap: 8px; }
-.btn.fdel { background: var(--rust-soft); color: var(--ink); border-color: var(--rust); box-shadow: var(--sh-btn), inset 0 0 0 1px var(--rust); }   /* same colours as the pressed "Pour 1 pièce / Pour 1 machine/min" toggle */
-.btn.fdel:hover { color: var(--rust); }
+.btn.fdel { background: var(--rust-soft); color: var(--ink); border-color: var(--rust-soft); }   /* rust fill, no outline: marks a heavy action without standing out */
+.btn.fdel:hover { color: var(--rust); border-color: var(--rust); }
 .mbody .lbl { color: var(--muted); font-size: 14px; margin: 12px 0 6px; }
 .afield { display: grid; gap: 4px; margin-top: 12px; }
 .afield > span:first-child { color: var(--muted); font-size: 14px; }

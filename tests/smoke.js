@@ -482,6 +482,27 @@ function checkImages() {
       await page.close();
     }
 
+    {
+      // catalogue "+": shown only while its row is hovered; its hover colours do not linger once the pointer has left,
+      // and after its dialog (opened with the mouse) closes, it does not stay shown through the focus given back
+      const { page, errors } = await open(browser, {}, "#desc-ironplate-c", { width: 1400, height: 900 });
+      const sel = '.pickrow [data-quickadd="Desc_IronRod_C"]';
+      await page.waitForSelector(sel, { timeout: 10000 });
+      const mid = async (s) => { const b = await (await page.$(s)).boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+      const btn = await mid(sel), row = await mid('.pick[data-pick="Desc_IronRod_C"]'), other = await mid('.pick[data-pick="Desc_IronScrew_C"]');
+      const look = () => page.$eval(sel, (b) => { const c = getComputedStyle(b); return `${(+c.opacity).toFixed(1)} ${c.backgroundColor}`; });
+      await page.mouse.move(...btn); await page.mouse.move(...other); await page.mouse.move(...row);
+      await page.waitForTimeout(40);
+      const back = await look();   // still fading in, but no longer in hover colours
+      await page.mouse.move(...btn); await page.mouse.click(...btn);
+      await page.click("#modal .mbtn[data-mclose]");
+      await page.mouse.move(...other); await page.waitForTimeout(300);
+      const closed = await look();
+      check(back.endsWith("rgb(27, 33, 36)") && closed.startsWith("0.0"), `Catalogue · « + » : couleurs au retour sur la ligne « ${back} », après la fenêtre, pointeur ailleurs « ${closed} »`);
+      if (errors.length) check(false, `Catalogue « + » · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+
     // No horizontal scroll at 390 px on any view (CLAUDE.md), with a factory large enough to fill the steps table.
     const big = { "sp-factory": [{ c: "Desc_ModularFrameHeavy_C", rate: 2 }, { c: "Desc_AluminumIngot_C", rate: 60 }] };
     for (const [label, hash] of [["Fiche pièce", "#desc-modularframeheavy-c"], ["Mon usine", "#usine"], ["Transport", "#transport"]]) {

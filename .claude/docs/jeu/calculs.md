@@ -2,6 +2,8 @@
 
 ## Mon usine (`plan(targets)`)
 
+- Calcul de l'usine active seulement : les usines sont indépendantes (pas de total commun, pas d'échange de pièces entre elles).
+
 - Point fixe itératif : la demande de chaque pièce génère des machines, dont les sorties secondaires sont déduites de la demande des autres (`supply`, `supplyBy`), jusqu'à stabilisation (`converged`). Si les recettes choisies forment une boucle qui ne converge pas, la page l'indique.
 - Résultat : `demand`, `supply`, `mach`, `raw`, `recovered`, `surplus`, `nMach`, `mw`, `flows` (consommateur → quantité), `supplyBy`.
 - Machines : « 1 machine à X % » ou « N machines, dont 1 à X % » (pas d'overclocking ni de Somersloop dans le calcul).
@@ -31,6 +33,7 @@
 - Wagons = max(ceil(débit / débit par wagon), ceil(débit / alimentation des quais)).
 - Au-delà de `maxW` wagons (8 par défaut) : plusieurs trains identiques partageant les gares, ou locomotives supplémentaires (1 par 8 wagons) selon l'option.
 - Trains mixtes : une composition par train.
+- Source « Ressources de Mon usine » : les ressources de l'usine active, choisie par des boutons ; le choix tapis / train / drones est gardé par usine.
 - Débit par quai = débit de la ressource ÷ ses quais (les trains identiques se partagent les mêmes quais) ; tapis par quai = ce débit ÷ un tapis du niveau choisi, arrondi au-dessus (2 au plus par construction).
 - Drones : 9 piles par trajet, batteries/min = drones × batteries par aller-retour / durée ; fluides impossibles.
 - Héliports : 1 par drone au départ + 1 d'arrivée par ressource.

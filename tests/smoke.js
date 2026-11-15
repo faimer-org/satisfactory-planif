@@ -123,12 +123,13 @@ function checkImages() {
         await page.click("#xb-Desc_Stone_C");
         await page.click('#xmenu [data-xm="Build_MinerMk1_C"]');
         const after = (await extText(page))["Calcaire"];
-        const saved = await page.evaluate(() => localStorage.getItem("sp-extract"));
+        const savedExt = () => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("sp-factories")).list[0].ext));
+        const saved = await savedExt();
         check(after === "2 Foreuses Mk.1 7,5 MW · gisement normal" && saved === '{"Desc_Stone_C":{"m":"Build_MinerMk1_C"}}',
           `${t.name} · choix Mk.1 pour le Calcaire : obtenu « ${after} », enregistré ${saved}`);
         await page.click("#xmenu [data-xreset]");
         const back = (await extText(page))["Calcaire"];
-        check(back === t.cards["Calcaire"] && await page.evaluate(() => localStorage.getItem("sp-extract")) === "{}",
+        check(back === t.cards["Calcaire"] && await savedExt() === "{}",
           `${t.name} · retour au réglage par défaut : obtenu « ${back} »`);
         await page.keyboard.press("Escape");
         check(await page.$eval("#xmenu", (e) => e.hidden), `${t.name} · Échap ferme le choix d'extraction`);
@@ -193,16 +194,20 @@ function checkImages() {
       if (errors.length) check(false, `Lien partagé · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
-    {
-      // an existing factory is only replaced after confirmation
+    for (const replace of [false, true]) {
+      // with a factory already there, the dialog asks where: a new factory by default, or replacing one (explicit button)
       const { page, errors } = await open(browser, { "sp-factory": [{ c: "Desc_IronPlate_C", rate: 30 }] }, "#usine:AluminumIngot*60");
       await page.waitForSelector("#modal:not([hidden]) [data-maction]", { timeout: 10000 });
-      const before = await page.$$eval(".goal .g-name", (els) => els.map((e) => e.textContent.trim()));
+      const before = await page.$$eval(".goal .g-name", (els) => els.map((e) => e.textContent.trim()).join());
+      if (replace) await page.click('#modal [data-dest="1"]');
+      const label = await page.$eval("#modal [data-maction]", (b) => b.textContent);
       await page.click("#modal [data-maction]");
-      const after = await page.$$eval(".goal .g-name", (els) => els.map((e) => e.textContent.trim()));
-      check(before.join() === "Plaque de fer" && after.join() === "Lingot d'aluminium",
-        `Lien partagé sur une usine existante · confirmation puis remplacement : ${before} → ${after}`);
-      if (errors.length) check(false, `Lien partagé (remplacement) · erreurs JS : ${errors.join(" | ")}`);
+      const after = await page.$$eval(".goal .g-name", (els) => els.map((e) => e.textContent.trim()).join());
+      const fs = await page.evaluate(() => JSON.parse(localStorage.getItem("sp-factories")).list.map((f) => f.name + ":" + f.goals.map((g) => g.c).join("+")).join(" "));
+      const want = replace ? ["Remplacer l'usine 1", "1:Desc_AluminumIngot_C"] : ["Ouvrir dans une nouvelle usine", "1:Desc_IronPlate_C 2:Desc_AluminumIngot_C"];
+      check(before === "Plaque de fer" && label === want[0] && after === "Lingot d'aluminium" && fs === want[1],
+        `Lien partagé sur une usine existante (${replace ? "remplacement" : "nouvelle usine"}) · « ${label} » : ${before} → ${after}, usines ${fs}`);
+      if (errors.length) check(false, `Lien partagé (${replace ? "remplacement" : "nouvelle usine"}) · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
 
@@ -226,15 +231,17 @@ function checkImages() {
         const got = await state();
         check(want.test(got), `Importer · « ${v.trim() || "(vide)"} » → ${got}`);
       }
-      await page.click("#modal [data-maction]");
-      await page.waitForSelector("#mtitle", { timeout: 10000 });
-      const title = await page.$eval("#mtitle", (e) => e.textContent);
+      // the factory is replaced only on the explicit "Remplacer l'usine 1" button
+      await page.click('#modal [data-dest="1"]');
+      const label = await page.$eval("#modal [data-maction]", (b) => b.textContent);
+      const warn = await page.$eval("#dest-warn", (e) => e.textContent);
       await page.click("#modal [data-maction]");
       await page.waitForSelector(".raws .raw", { timeout: 10000 });
       const goals = await page.$$eval(".goal .g-name", (els) => els.map((e) => e.textContent.trim()).join());
       const ore = await page.$$eval(".raws .raw", (els) => els.find((e) => e.querySelector("button.link")?.textContent.trim() === "Minerai de fer")?.querySelector("b").textContent);
-      check(title === "Ouvrir l'usine partagée ?" && goals === "Cadre modulaire lourd" && ore && Math.abs(num(ore) - 341.54) < 0.01,
-        `Importer · confirmation puis remplacement : « ${title} », ${goals}, minerai de fer ${ore}`);
+      const nf = await page.evaluate(() => JSON.parse(localStorage.getItem("sp-factories")).list.length);
+      check(label === "Remplacer l'usine 1" && /seront remplacés/.test(warn) && goals === "Cadre modulaire lourd" && nf === 1 && ore && Math.abs(num(ore) - 341.54) < 0.01,
+        `Importer · remplacement de l'usine 1 : « ${label} », ${goals}, ${nf} usine, minerai de fer ${ore}`);
       if (errors.length) check(false, `Importer · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
@@ -349,6 +356,129 @@ function checkImages() {
         els.map((e) => Math.round((e.querySelector("summary") || e).querySelector(".nh .ico").getBoundingClientRect().left)));
       check(xs.length === 2 && xs[0] === xs[1], `Arbres · entrées des Rebuts d'aluminium alignées : abscisses des icônes ${xs.join(", ")}`);
       if (errors.length) check(false, `Arbres à 390 px · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+
+    // Several factories (sp-factories). Iron plate, standard recipe: 2 plates every 6 s in a Constructor = 20/min per machine.
+    const FSK = () => JSON.parse(localStorage.getItem("sp-factories"));
+    const fsSummary = (page) => page.evaluate(() => { const s = JSON.parse(localStorage.getItem("sp-factories")); return s.list.map((f) => `${f.id === s.cur ? "*" : ""}${f.name}:` + f.goals.map((g) => g.c.replace(/Desc_|_C/g, "") + "*" + g.rate).join("+")).join(" "); });
+    const mkF = (list, cur = 1) => ({ "sp-factories": { cur, list: list.map(([name, goals], i) => ({ id: i + 1, name, goals, choices: {}, ext: {}, via: {} })) } });
+    {
+      // old single factory → factory "1", with its recipes, extraction and transport choices
+      const { page, errors } = await open(browser, { "sp-factory": [{ c: "Desc_IronPlate_C", rate: 30 }], "sp-choice-f": { Desc_IronIngot_C: "Recipe_Alternate_PureIronIngot_C" },
+        "sp-extract": { Desc_OreIron_C: { p: "Pure" } }, "sp-transport": { via: { Desc_OreIron_C: "train" } } }, "#usine");
+      await page.waitForSelector(".fsel [data-fsel]", { timeout: 10000 });
+      const s = await page.evaluate(FSK);
+      const f = s.list[0];
+      check(s.list.length === 1 && f.name === "1" && f.goals[0].rate === 30 && f.choices.Desc_IronIngot_C === "Recipe_Alternate_PureIronIngot_C" && f.ext.Desc_OreIron_C.p === "Pure" && f.via.Desc_OreIron_C === "train",
+        `Usines · reprise de l'ancienne usine : ${JSON.stringify(s)}`);
+      if (errors.length) check(false, `Usines (reprise) · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // no factory: the popup has no factory choice, a factory "1" is created; the rate follows "Pour 1 pièce / Pour 1 machine/min"
+      const { page, errors } = await open(browser, { "sp-qmode": "machine" }, "#desc-ironplate-c");
+      await page.waitForSelector(".head [data-quickadd]", { timeout: 10000 });
+      const seg = await page.$eval('[data-qmode="machine"]', (b) => b.textContent);
+      await page.click(".head [data-quickadd]");
+      const pre = await page.$eval("#add-rate", (i) => i.value);
+      const destShown = await page.$$eval("#modal [data-dest]", (b) => b.length);
+      await page.click("#modal [data-maction]");
+      const s1 = await fsSummary(page);
+      check(seg === "Pour 1 machine/min" && pre === "20" && destShown === 0 && s1 === "*1:IronPlate*20",
+        `Ajouter (aucune usine, pour 1 machine/min) · libellé « ${seg} », pré-rempli ${pre}, choix d'usine ${destShown}, usines ${s1}`);
+      // "Pour 1 pièce": 1; the same part again adds to its rate in the chosen factory, and says so
+      await page.click('[data-qmode="unit"]');
+      await page.click(".head [data-quickadd]");
+      const pre2 = await page.$eval("#add-rate", (i) => i.value);
+      const hint = await page.$eval("#add-msg", (m) => m.textContent);
+      const dests = await page.$$eval("#modal [data-dest]", (bs) => bs.map((b) => b.textContent.trim() + (b.getAttribute("aria-pressed") === "true" ? "*" : "")).join(","));
+      await page.keyboard.press("Enter");
+      const s2 = await fsSummary(page);
+      check(pre2 === "1" && dests === "1*,+ Nouvelle usine" && hint === "Déjà 20/min dans cette usine : le débit passera à 21/min." && s2 === "*1:IronPlate*21",
+        `Ajouter (pour 1 pièce, usine existante) · pré-rempli ${pre2}, usines proposées ${dests}, « ${hint} », usines ${s2}`);
+      // new factory from the popup, with its name; a name already used is refused
+      await page.click(".head [data-quickadd]");
+      await page.click('#modal [data-dest="new"]');
+      const defName = await page.$eval("#dest-name", (i) => i.value);
+      await page.fill("#dest-name", " 1 ");
+      await page.click("#modal [data-maction]");
+      const err = await page.$eval("#add-msg", (m) => m.textContent);
+      await page.fill("#dest-name", "Nord");
+      await page.fill("#add-rate", "12,5");
+      await page.click("#modal [data-maction]");
+      const s3 = await fsSummary(page);
+      const count = await page.$eval('.mode[data-view="factory"] .count', (e) => e.textContent);
+      check(defName === "2" && err === "Une autre usine porte déjà ce nom." && s3 === "1:IronPlate*21 *Nord:IronPlate*12.5" && count === "1",
+        `Ajouter dans une nouvelle usine · nom proposé ${defName}, doublon « ${err} », usines ${s3}, compteur ${count}`);
+      // the catalogue "+" opens the same popup
+      await page.click('.pickrow:has([data-pick="Desc_IronPlate_C"]) [data-quickadd]', { force: true });
+      const fromCat = await page.$eval("#mtitle", (e) => e.textContent);
+      await page.keyboard.press("Escape");
+      check(fromCat === "Ajouter à mon usine", `Catalogue · le « + » ouvre la popup : ${fromCat}`);
+      if (errors.length) check(false, `Ajouter à mon usine · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // selector of Mon usine: switch, rename, empty (the factory stays), delete (after confirmation)
+      const { page, errors } = await open(browser, mkF([["1", [{ c: "Desc_IronPlate_C", rate: 30 }]], ["2", [{ c: "Desc_AluminumIngot_C", rate: 60 }]]]), "#usine");
+      await page.waitForSelector('[data-fsel="2"]', { timeout: 10000 });
+      await page.click('[data-fsel="2"]');
+      const g2 = await page.$$eval(".goal .g-name", (els) => els.map((e) => e.textContent.trim()).join());
+      await page.click("[data-frename]");
+      await page.fill("#fname", "1");
+      await page.click("#modal [data-maction]");
+      const dup = await page.$eval("#fname-msg", (m) => m.textContent);
+      await page.fill("#fname", "Aluminium");
+      await page.keyboard.press("Enter");
+      const names = await page.$$eval(".fsel [data-fsel] .fname", (els) => els.map((e) => e.textContent).join(","));
+      check(g2 === "Lingot d'aluminium" && dup === "Une autre usine porte déjà ce nom." && names === "1,Aluminium",
+        `Mon usine · changer d'usine (${g2}), renommer (doublon « ${dup} ») : ${names}`);
+      await page.click("[data-clear]");
+      await page.click("#modal [data-maction]");
+      const afterClear = await fsSummary(page);
+      await page.click("[data-fdel]");
+      const delTitle = await page.$eval("#mtitle", (e) => e.textContent);
+      await page.click("#modal [data-maction]");
+      const afterDel = await fsSummary(page);
+      check(afterClear === "1:IronPlate*30 *Aluminium:" && delTitle === "Supprimer l'usine ?" && afterDel === "*1:IronPlate*30",
+        `Mon usine · vider garde l'usine (${afterClear}), supprimer après confirmation (${afterDel})`);
+      if (errors.length) check(false, `Mon usine (sélecteur) · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // at most 5 factories: the "+" is greyed out with an explanation, "Nouvelle usine" too in the popup
+      const five = mkF([1, 2, 3, 4, 5].map((n) => [String(n), [{ c: "Desc_IronPlate_C", rate: n }]]));
+      const { page, errors } = await open(browser, five, "#usine", { width: 390, height: 800 });
+      await page.waitForSelector("[data-fnew]", { timeout: 10000 });
+      const plus = await page.$eval("[data-fnew]", (b) => b.getAttribute("aria-disabled") + " · " + b.dataset.tip);
+      await page.click("[data-fnew]", { force: true });   // greyed out with aria-disabled (keeps its tooltip): a click explains instead
+      const noDialog = await page.$eval("#modal", (m) => m.hidden) && /Maximum de 5 usines/.test(await page.$eval("#toast", (t) => t.textContent));
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      await page.evaluate(() => { location.hash = "#desc-ironplate-c"; });
+      await page.waitForSelector(".head [data-quickadd]", { timeout: 10000 });
+      await page.click(".head [data-quickadd]");
+      const nw = await page.$eval('#modal [data-dest="new"]', (b) => b.getAttribute("aria-disabled"));
+      check(plus === "true · Maximum de 5 usines atteint : supprimez-en une pour en créer une autre." && noDialog && nw === "true" && over <= 0,
+        `5 usines · « + » grisé (${plus}), pas de fenêtre (${noDialog}), « Nouvelle usine » grisé (${nw}), débordement à 390 px ${over} px`);
+      if (errors.length) check(false, `5 usines · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // Transport, Ressources de Mon usine: factory chooser; transport choices kept per factory
+      const st = mkF([["1", [{ c: "Desc_IronPlate_C", rate: 20 }]], ["2", [{ c: "Desc_AluminumIngot_C", rate: 60 }]]]);
+      st["sp-transport"] = { src: "factory", via: {} };
+      const { page, errors } = await open(browser, st, "#transport");
+      await page.waitForSelector(".tfbar [data-fsel]", { timeout: 10000 });
+      const res = () => page.$$eval(".tline .g-name", (els) => els.map((e) => e.textContent.trim()).join());
+      const r1 = await res();
+      await page.click('.vcell[data-via="train"][data-viac="Desc_OreIron_C"]');
+      await page.click('.tfbar [data-fsel="2"]');
+      const r2 = await res();
+      const s = await page.evaluate(FSK);
+      check(r1 === "Minerai de fer" && r2 === "Bauxite,Eau,Charbon,Quartz brut" && s.cur === 2 && s.list[0].via.Desc_OreIron_C === "train" && !Object.keys(s.list[1].via).length,
+        `Transport · usine 1 (${r1}) puis 2 (${r2}), choix du train gardé pour l'usine 1 : ${JSON.stringify(s.list.map((f) => f.via))}`);
+      if (errors.length) check(false, `Transport (usines) · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
 

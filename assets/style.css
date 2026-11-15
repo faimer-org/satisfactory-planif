@@ -422,6 +422,8 @@ sup.fn { color: var(--rust); font: 600 12px/0 var(--mono); margin-left: 1px; }
 .fbtn.fadd { color: var(--rust); border-color: var(--rust); padding: 6px 10px; }
 .fbtn[aria-disabled="true"], .fbtn[aria-disabled="true"]:hover { opacity: .4; cursor: not-allowed; filter: grayscale(.5); border-color: var(--line); color: var(--muted); }
 .fact { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.fdel { background: var(--rust-soft); color: var(--ink); border-color: var(--rust); box-shadow: var(--sh-btn), inset 0 0 0 1px var(--rust); }   /* same colours as the pressed "Pour 1 pièce / Pour 1 machine/min" toggle */
+.btn.fdel:hover { color: var(--rust); }
 .mbody .lbl { color: var(--muted); font-size: 14px; margin: 12px 0 6px; }
 .afield { display: grid; gap: 4px; margin-top: 12px; }
 .afield > span:first-child { color: var(--muted); font-size: 14px; }

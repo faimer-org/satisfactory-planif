@@ -760,8 +760,8 @@ function renderFactory() {
   }
   const n = factory.length;
   h += `<div class="card"><section class="head"><div><div class="eyebrow">${n ? `${n} pièce${n > 1 ? "s" : ""} demandée${n > 1 ? "s" : ""}` : "Usine vide"}</div><h2>Mon usine</h2></div>
-      <div class="hbtns">${n ? `<button class="btn" data-share="1">Partager</button>` : ""}<button class="btn" data-import="1">Importer</button>${n ? `<button class="btn" data-clear="1">Vider l'usine</button>` : ""}</div></section>
-    <section class="fbar">${factoryTabs(true)}<div class="fact"><button class="btn" data-frename="1">Renommer</button><button class="btn" data-fdel="1">Supprimer l'usine</button></div></section>`;
+      <div class="hbtns">${n ? `<button class="btn" data-share="1">Partager</button>` : ""}<button class="btn" data-import="1">Importer</button></div></section>
+    <section class="fbar">${factoryTabs(true)}<div class="fact"><button class="btn" data-frename="1">Renommer</button>${n ? `<button class="btn" data-clear="1">Vider l'usine</button>` : ""}<button class="btn fdel" data-fdel="1">Supprimer l'usine</button></div></section>`;
   if (!n) {
     return h + `<section><p class="lede" style="margin:0">Cette usine est vide. ${pieceTxt}</p>
       <button class="btn primary addgoal" data-addline="1" aria-haspopup="listbox">+ Ajouter une pièce</button></section></div>`;

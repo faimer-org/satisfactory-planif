@@ -164,7 +164,7 @@ td .sub { display: block; color: var(--ok); font-size: 14px; }
 .note.ok { color: var(--ok); }
 .btn.danger { border-color: var(--rust); color: var(--rust); }
 hr.sep { border: 0; border-top: 1px dashed var(--line); margin: 14px 0; }
-#tip { position: fixed; z-index: 50; left: 0; top: 0; max-width: min(320px, calc(100vw - 16px)); background: var(--tip-bg); color: var(--tip-fg);
+#tip { position: fixed; z-index: 85; left: 0; top: 0; max-width: min(320px, calc(100vw - 16px)); background: var(--tip-bg); color: var(--tip-fg);
   border: 1px solid var(--tip-border); border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.4; box-shadow: 0 8px 24px var(--tip-shadow); }
 #tip .t-head { display: flex; gap: 10px; align-items: center; }
 #tip .t-head .ico { width: 36px; height: 36px; }
@@ -407,6 +407,32 @@ sup.fn { color: var(--rust); font: 600 12px/0 var(--mono); margin-left: 1px; }
 .tnotes b { color: var(--ink); font-size: 14px; }
 .tnotes ol { margin: 4px 0 0; padding-left: 22px; line-height: 1.5; }
 .tnotes li::marker { color: var(--rust); font: 600 13px var(--mono); }
+
+/* Factories: selector (Mon usine, Transport, dialogs) and the add dialog */
+.fbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.tfbar { justify-content: flex-start; margin-bottom: 12px; }
+.tfbar .tlabel { min-width: 0; }
+.fsel { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.fbtn { display: inline-flex; align-items: center; gap: 6px; min-width: 40px; max-width: 100%; justify-content: center; background: linear-gradient(180deg, var(--btn-top), var(--btn-bot)); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 600; color: var(--muted); box-shadow: var(--sh-btn); transition: border-color .12s, color .12s, background-color .12s; }
+.fbtn .fname { min-width: 0; overflow-wrap: anywhere; }
+.fbtn:hover { border-color: var(--rust); color: var(--ink); }
+.fbtn[aria-pressed="true"] { background: var(--rust-soft); color: var(--ink); border-color: var(--rust); box-shadow: var(--sh-1), inset 0 -2px 0 var(--rust); }
+.fbtn .count { font: 500 12px/1 var(--mono); background: var(--line); color: var(--ink); border-radius: 999px; padding: 3px 6px; }
+.fbtn[aria-pressed="true"] .count { background: var(--rust); color: var(--rust-ink); }
+.fbtn.fadd { color: var(--rust); border-color: var(--rust); padding: 6px 10px; }
+.fbtn[aria-disabled="true"], .fbtn[aria-disabled="true"]:hover { opacity: .4; cursor: not-allowed; filter: grayscale(.5); border-color: var(--line); color: var(--muted); }
+.fact { display: flex; flex-wrap: wrap; gap: 8px; }
+.mbody .lbl { color: var(--muted); font-size: 14px; margin: 12px 0 6px; }
+.afield { display: grid; gap: 4px; margin-top: 12px; }
+.afield > span:first-child { color: var(--muted); font-size: 14px; }
+.afield .g-rate { display: inline-flex; align-items: center; gap: 6px; }
+.afield .g-rate input { background: var(--sunk); }
+.dest-name input { max-width: 340px; font-family: var(--body); font-size: 15px; }
+.addhead { display: flex; align-items: center; gap: 10px; }
+.addhead b { display: block; font-size: 18px; }
+.addhead small { color: var(--muted); font-size: 14px; }
+#dest-warn { color: var(--warn); }
+#dest-warn:empty { display: none; }
 
 /* Base reset (the Claude artifact host used to add it) */
 html { -webkit-text-size-adjust: 100%; }

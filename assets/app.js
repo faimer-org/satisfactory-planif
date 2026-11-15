@@ -12,14 +12,11 @@ const EPS = 1e-9;
 
 /* Recipe choices (item -> recipe id, "" = external input) exist only in "Mon usine".
    Part sheets always show the standard recipes. */
-let choiceF = store.get("sp-choice-f", null) || store.get("sp-choice", {});
+/* The active factory's data (see "factories" below): goals [{c, rate}], recipe choices, and extraction settings of raw
+   resources: item -> {m: extractor (absent = smallest that fits), p: purity (absent = Normal)}. */
+let factory = [], choiceF = {}, extF = {};
 let choice = {};
 function useChoices() { choice = view === "factory" ? choiceF : {}; }
-function saveChoice() { store.set("sp-choice-f", choiceF); }
-let factory = store.get("sp-factory", []);   // [{c, rate}]
-/* Extraction settings of raw resources in "Mon usine": item -> {m: extractor (absent = smallest that fits), p: purity (absent = Normal)} */
-const extF = store.get("sp-extract", {});
-const saveExt = () => store.set("sp-extract", extF);
 let sel = null;
 let view = "item";                           // "item" | "factory"
 const othersOpen = { main: false, byp: false };   // item sheet: "Autres recettes" / "Obtenu en sous-produit" unfolded
@@ -47,6 +44,61 @@ const MAX_RATE = 100000;
 const clampRate = (x) => Math.min(MAX_RATE, round2(x));
 const parseNum = (s) => { const v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return v >= 0 && isFinite(v) ? v : null; };
 const defaultRate = (c) => { const r = recipeOf(c); return r ? perMin(r, c, "o") : 60; };
+
+/* ---------- factories: up to MAX_FACTORIES, one active ----------
+   sp-factories = { cur: id, list: [{ id, name, goals, choices, ext, via }] }; via = transport choice per resource.
+   Mon usine, Transport (Ressources de Mon usine) and the share link work on the active factory. */
+const MAX_FACTORIES = 5, NAME_MAX = 30;
+const FULL_TIP = `Maximum de ${MAX_FACTORIES} usines atteint : supprimez-en une pour en créer une autre.`;
+const isObj = (o) => !!o && typeof o === "object" && !Array.isArray(o);
+function loadFactories() {
+  const goalsOf = (g) => (Array.isArray(g) ? g.filter((x) => x && typeof x.c === "string" && +x.rate >= 0).map((x) => ({ c: x.c, rate: clampRate(+x.rate) })) : []);
+  const s = store.get("sp-factories", null);
+  if (isObj(s) && Array.isArray(s.list)) {
+    const list = s.list.filter(isObj).slice(0, MAX_FACTORIES).map((f, i) => ({ id: f.id, name: String(f.name || "").trim().slice(0, NAME_MAX) || String(i + 1),
+      goals: goalsOf(f.goals), choices: isObj(f.choices) ? f.choices : {}, ext: isObj(f.ext) ? f.ext : {}, via: isObj(f.via) ? f.via : {} }));
+    if (list.some((f, i) => !Number.isInteger(f.id) || list.findIndex((g) => g.id === f.id) !== i)) list.forEach((f, i) => { f.id = i + 1; });   // unreadable or duplicate ids
+    return { cur: list.some((f) => f.id === s.cur) ? s.cur : list.length ? list[0].id : null, list };
+  }
+  // before several factories: a single one in sp-factory, sp-choice-f (or sp-choice) and sp-extract; transport choices in sp-transport
+  const goals = goalsOf(store.get("sp-factory", [])), choices = store.get("sp-choice-f", null) || store.get("sp-choice", {});
+  if (!goals.length) return { cur: null, list: [] };
+  const ext = store.get("sp-extract", {}), T0 = store.get("sp-transport", {});
+  return { cur: 1, list: [{ id: 1, name: "1", goals, choices: isObj(choices) ? choices : {}, ext: isObj(ext) ? ext : {}, via: isObj(T0) && isObj(T0.via) ? { ...T0.via } : {} }] };
+}
+const FS = loadFactories();
+const curF = () => FS.list.find((f) => f.id === FS.cur) || null;
+function bindFactory() { const f = curF(); factory = f ? f.goals : []; choiceF = f ? f.choices : {}; extF = f ? f.ext : {}; useChoices(); }
+function saveFS() {
+  const f = curF();
+  if (f) { f.goals = factory; f.choices = choiceF; f.ext = extF; }
+  store.set("sp-factories", FS);
+}
+const saveFactory = saveFS, saveChoice = saveFS, saveExt = saveFS;
+function setFactory(id) { saveFS(); FS.cur = id; bindFactory(); saveFS(); }
+function createFactory(nm) {
+  const id = Math.max(0, ...FS.list.map((f) => f.id)) + 1;
+  FS.list.push({ id, name: (nm || "").trim().slice(0, NAME_MAX) || defaultFactoryName(), goals: [], choices: {}, ext: {}, via: {} });
+  setFactory(id);
+  return curF();
+}
+function deleteFactory(id) {
+  const i = FS.list.findIndex((f) => f.id === id);
+  if (i < 0) return;
+  saveFS();
+  FS.list.splice(i, 1);
+  if (FS.cur === id) FS.cur = FS.list.length ? FS.list[Math.min(i, FS.list.length - 1)].id : null;
+  bindFactory(); saveFS();
+}
+function defaultFactoryName() { for (let i = 1; ; i++) if (!FS.list.some((f) => f.name === String(i))) return String(i); }
+function factoryNameErr(nm, id) {
+  nm = nm.trim().toLocaleLowerCase("fr");
+  if (!nm) return "Donnez un nom à l'usine.";
+  return FS.list.some((f) => f.id !== id && f.name.toLocaleLowerCase("fr") === nm) ? "Une autre usine porte déjà ce nom." : "";
+}
+const fLabelTxt = (f) => (/^\d+$/.test(f.name) ? `l'usine ${f.name}` : `l'usine « ${f.name} »`);   // "l'usine 2", "l'usine « Nord »"
+const fLabel = (f) => esc(fLabelTxt(f));
+const sameFactory = (f, S) => shareCode(f.goals, f.choices, f.ext) === shareCode(S.goals, S.choices, S.ext);
 
 /* Structural depth (steps from raw inputs) under current choices. */
 let lvlMemo = {};
@@ -140,7 +192,7 @@ function renderCatalogue() {
     if (!list) continue;
     list.sort((a, b) => name(a).localeCompare(name(b), "fr"));
     h += `<details class="cat-group" ${q || !(g === "Autres" || g.startsWith("FICSMAS")) ? "open" : ""}><summary>${esc(g)} <span class="num">${list.length}</span></summary>` +
-      list.map((c) => `<div class="pickrow"><button class="pick${view === "item" && c === sel ? " on" : ""}" data-pick="${c}">${icon(c, "sm")}<span>${esc(name(c))}</span></button>${D.std[c] ? `<button class="padd" type="button" data-quickadd="${c}" data-tip="Ajouter à mon usine (1/min)" aria-label="Ajouter ${esc(name(c))} à mon usine, 1 par minute"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>` : ""}</div>`).join("") +
+      list.map((c) => `<div class="pickrow"><button class="pick${view === "item" && c === sel ? " on" : ""}" data-pick="${c}">${icon(c, "sm")}<span>${esc(name(c))}</span></button>${D.std[c] ? `<button class="padd" type="button" data-quickadd="${c}" aria-haspopup="dialog" data-tip="Ajouter à mon usine" aria-label="Ajouter ${esc(name(c))} à mon usine"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>` : ""}</div>`).join("") +
       `</details>`;
   }
   document.getElementById("catlist").innerHTML = h || `<p class="empty" style="padding:10px">Aucune pièce ne correspond.</p>`;
@@ -646,10 +698,10 @@ function renderItem() {
     <section class="head">${icon(c, "lg")}
       <div><div class="eyebrow">${esc(it.cat)}${r ? ` · ${lvlOf(c) + 1} étape${lvlOf(c) ? "s" : ""} depuis les ressources brutes` : it.raw ? " · ressource brute" : ""}</div>
       <h2>${esc(it.fr)}</h2><div class="en">${esc(it.en)}</div></div>
-      ${r ? `<button class="btn primary" data-quickadd="${c}" data-tip="Ajoute 1/min ; si la pièce y est déjà, son débit augmente de 1">+ Ajouter à mon usine</button>` : ""}
+      ${r ? `<button class="btn primary" data-quickadd="${c}" aria-haspopup="dialog" data-tip="Choisir le débit et l'usine ; si la pièce y est déjà, son débit augmente d'autant">+ Ajouter à mon usine</button>` : ""}
     </section>
     <section><div class="sec-head"><h3 class="uh" style="margin:0">Fabriqué dans</h3>${(D.opts[c] || []).length ? `<div class="seg" role="group" aria-label="Quantités affichées">
-        <button class="segb" data-qmode="unit" aria-pressed="${qMode === "unit"}">Pour 1 ${D.items[c].fl ? "m³" : "pièce"}</button><button class="segb" data-qmode="machine" aria-pressed="${qMode === "machine"}">Pour 1 machine, par minute</button></div>` : ""}</div>`;
+        <button class="segb" data-qmode="unit" aria-pressed="${qMode === "unit"}">Pour 1 ${D.items[c].fl ? "m³" : "pièce"}</button><button class="segb" data-qmode="machine" aria-pressed="${qMode === "machine"}">Pour 1 machine/min</button></div>` : ""}</div>`;
   if (r) {
     const R = D.recipes[r];
     const byp = R.o.filter(([o]) => o !== c);
@@ -666,7 +718,7 @@ function renderItem() {
   const group = (grp, list, title, note) => `<section><details class="others" data-grp="${grp}"${othersOpen[grp] ? " open" : ""}><summary><h3 class="uh" style="display:inline">${title} · ${list.length}</h3></summary>${note}<div class="rcards">${list.map((x) => recipeCard(c, x)).join("")}</div></details></section>`;
   if (mains.length) h += group("main", mains, "Autres recettes", "");
   if (byps.length) h += group("byp", byps, "Obtenu en sous-produit",
-    `<p class="note">Recettes d'autres pièces, qui en donnent aussi. Les quantités suivent le choix « Pour 1 ${D.items[c].fl ? "m³" : "pièce"} / Pour 1 machine » ci-dessus.</p>`);
+    `<p class="note">Recettes d'autres pièces, qui en donnent aussi. Les quantités suivent le choix « Pour 1 ${D.items[c].fl ? "m³" : "pièce"} / Pour 1 machine/min » ci-dessus.</p>`);
   h += `</div>`;
   tab = tabI;
   const tabs = [["uses", "Utilisé dans"], ["without", "Sans cette pièce"]];
@@ -689,18 +741,32 @@ function compoHtml(c) {                 // every part involved, standard recipes
   return h + `<p class="note">Tout ce qui entre dans sa fabrication avec les recettes standard, rangé par étape depuis les ressources brutes. Les quantités se calculent dans Mon usine.</p>`;
 }
 
+/* Factory selector: one button per factory; in Mon usine, a "+" to create one (greyed out at the maximum). */
+function factoryTabs(withAdd) {
+  const full = FS.list.length >= MAX_FACTORIES;
+  return `<div class="fsel" role="group" aria-label="Usines">` + FS.list.map((f) => `<button type="button" class="fbtn" data-fsel="${f.id}" aria-pressed="${f.id === FS.cur}" aria-label="Usine ${esc(f.name)}, ${f.goals.length} pièce${f.goals.length > 1 ? "s" : ""}"><span class="fname">${esc(f.name)}</span>${withAdd ? `<span class="count">${f.goals.length}</span>` : ""}</button>`).join("") +
+    (withAdd ? `<button type="button" class="fbtn fadd" data-fnew="1" aria-disabled="${full}" data-tip="${full ? FULL_TIP : "Créer une usine"}" aria-label="${full ? FULL_TIP : "Créer une usine"}"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>` : "") + `</div>`;
+}
+const pieceTxt = "Ajoutez les pièces que vous voulez produire avec le bouton ci-dessous, ou avec le « + » qui apparaît au survol d'une pièce dans le catalogue.";
 function renderFactory() {
   let h = modeBar();
-  if (!factory.length) {
+  const f = curF();
+  if (!f) {
     return h + `<div class="card"><section>
       <h2 style="font-size:34px">Mon usine</h2>
-      <p class="lede">Votre usine est vide. Ajoutez les pièces que vous voulez produire avec le bouton ci-dessous, ou avec le « + » qui apparaît au survol d'une pièce dans le catalogue. Les pièces intermédiaires communes sont regroupées et les sous-produits réutilisés.</p>
-      <div class="hbtns" style="margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px"><button class="btn primary addgoal" data-addline="1" aria-haspopup="listbox">+ Ajouter une pièce</button><button class="btn" data-import="1">Importer une usine</button></div>
+      <p class="lede">Vous n'avez pas encore d'usine. ${pieceTxt} Une usine est créée au premier ajout ; vous pouvez en avoir jusqu'à ${MAX_FACTORIES}. Les pièces intermédiaires communes sont regroupées et les sous-produits réutilisés.</p>
+      <div class="hbtns" style="margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px"><button class="btn primary addgoal" data-addline="1" aria-haspopup="listbox">+ Ajouter une pièce</button><button class="btn" data-fnew="1">Créer une usine</button><button class="btn" data-import="1">Importer une usine</button></div>
     </section></div>`;
   }
-  h += `<div class="card"><section class="head"><div><div class="eyebrow">${factory.length} pièce${factory.length > 1 ? "s" : ""} demandée${factory.length > 1 ? "s" : ""}</div><h2>Mon usine</h2></div>
-      <div class="hbtns"><button class="btn" data-share="1">Partager</button><button class="btn" data-import="1">Importer</button><button class="btn" data-clear="1">Vider l'usine</button></div></section>
-    <section><div class="goals">` +
+  const n = factory.length;
+  h += `<div class="card"><section class="head"><div><div class="eyebrow">${n ? `${n} pièce${n > 1 ? "s" : ""} demandée${n > 1 ? "s" : ""}` : "Usine vide"}</div><h2>Mon usine</h2></div>
+      <div class="hbtns">${n ? `<button class="btn" data-share="1">Partager</button>` : ""}<button class="btn" data-import="1">Importer</button>${n ? `<button class="btn" data-clear="1">Vider l'usine</button>` : ""}</div></section>
+    <section class="fbar">${factoryTabs(true)}<div class="fact"><button class="btn" data-frename="1">Renommer</button><button class="btn" data-fdel="1">Supprimer l'usine</button></div></section>`;
+  if (!n) {
+    return h + `<section><p class="lede" style="margin:0">Cette usine est vide. ${pieceTxt}</p>
+      <button class="btn primary addgoal" data-addline="1" aria-haspopup="listbox">+ Ajouter une pièce</button></section></div>`;
+  }
+  h += `<section><div class="goals">` +
     factory.map((f, i) => `<div class="goal" id="goalrow-${f.c}">${icon(f.c)}<div class="g-name"><button class="link" data-pick="${f.c}">${esc(name(f.c))}</button></div>
         <div class="g-recipe">${recipeSelect(f.c, "goal-r-" + f.c)}</div>
         <label class="g-rate"><input type="text" inputmode="decimal" autocomplete="off" value="${fmtIn(f.rate)}" data-goal="${i}" id="goal-${f.c}" aria-label="Débit de ${esc(name(f.c))}"> <span class="num">${unit(f.c).trim() || ""} / min</span></label>
@@ -768,7 +834,6 @@ function showFactory() {
   view = "factory"; useChoices(); store.set("sp-view", view); setHash("usine");
   renderCatalogue(); render();
 }
-const saveFactory = () => store.set("sp-factory", factory);
 function keepFocus(id, fn) {
   const el = document.getElementById(id);
   const pos = el && el.selectionStart;
@@ -832,12 +897,29 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-share]")) { shareFactory(); return; }
   if (e.target.closest("[data-import]")) { importFactory(); return; }
   if (e.target.closest("[data-clear]")) {
-    const n = factory.length, k = Object.keys(choiceF).length;
+    const f = curF(), n = factory.length, k = Object.keys(choiceF).length;
+    if (!f) return;
     openModal({
       title: "Vider l'usine ?",
-      body: `<p>${n > 1 ? `Les ${n} pièces` : "La pièce"} de votre usine${k ? (k > 1 ? ` et ses ${k} recettes modifiées` : " et sa recette modifiée") : ""} ${n > 1 || k ? "seront retirées" : "sera retirée"}. Cette action ne peut pas être annulée.</p>`,
+      body: `<p>${n > 1 ? `Les ${n} pièces` : "La pièce"} de ${fLabel(f)}${k ? (k > 1 ? ` et ses ${k} recettes modifiées` : " et sa recette modifiée") : ""} ${n > 1 || k ? "seront retirées" : "sera retirée"}. L'usine reste dans la liste, vide. Cette action ne peut pas être annulée.</p>`,
       inline: true,
-      actions: [{ label: "Vider l'usine", kind: "danger", run: () => { factory = []; for (const x in choiceF) delete choiceF[x]; store.set("sp-choice-f", choiceF); for (const x in extF) delete extF[x]; saveExt(); saveFactory(); render(); } }],
+      actions: [{ label: "Vider l'usine", kind: "danger", run: () => { f.goals = []; f.choices = {}; f.ext = {}; bindFactory(); saveFS(); render(); } }],
+    });
+    return;
+  }
+  const fs = e.target.closest("[data-fsel]");
+  if (fs) { if (+fs.dataset.fsel !== FS.cur) { setFactory(+fs.dataset.fsel); render(); } const b = document.querySelector(`[data-fsel="${FS.cur}"]`); if (b) b.focus(); return; }
+  if (e.target.closest("[data-fnew]")) { newFactoryDialog(); return; }
+  if (e.target.closest("[data-frename]")) { renameFactoryDialog(); return; }
+  if (e.target.closest("[data-fdel]")) {
+    const f = curF();
+    if (!f) return;
+    const n = f.goals.length;
+    openModal({
+      title: "Supprimer l'usine ?",
+      body: `<p>${fLabel(f)[0].toUpperCase() + fLabel(f).slice(1)} sera supprimée${n ? `, avec ${n > 1 ? `ses ${n} pièces` : "sa pièce"}, ses recettes et ses réglages d'extraction et de transport` : ""}. Cette action ne peut pas être annulée.</p>`,
+      inline: true,
+      actions: [{ label: "Supprimer l'usine", kind: "danger", run: () => { const lbl = fLabel(f); deleteFactory(f.id); render(); toast(`${lbl[0].toUpperCase() + lbl.slice(1)} a été supprimée.`); } }],
     });
     return;
   }
@@ -928,7 +1010,6 @@ function pruneFactoryChoices() {
   const p = prunedChoices(choiceF, factory);
   for (const k in choiceF) delete choiceF[k];
   Object.assign(choiceF, p);
-  store.set("sp-choice-f", choiceF);
   const used = factory.length ? factoryUsed(factory) : new Set();   // extraction settings of resources no longer needed
   for (const k in extF) if (!used.has(k)) delete extF[k];
   saveExt();
@@ -993,24 +1074,36 @@ function shareFactory() {
   else manual();
 }
 function openShared() { applyShared(parseShare(location.hash.slice(1))); }
-function applyShared(S) {                // same checks for a link opened in the address bar and for "Importer"
-  showFactory();                          // replaces the address with #usine: a reload keeps the local factory
+/* A shared factory goes into a new factory or replaces one, chosen in the dialog (destHtml): a new one by default,
+   the active one when the maximum is reached. Replacing keeps the factory's name and transport choices. */
+function applySharedTo(S) {               // into dest (see destHtml)
+  const pick = FS.list.find((f) => f.id === dest.sel);
+  if (pick && sameFactory(pick, S)) { setFactory(pick.id); render(); toast(`${cap1(fLabel(pick))} est déjà celle de ce lien.`); return; }
+  destApply();
+  const f = curF(), n = S.goals.length;
+  f.goals = S.goals; f.choices = { ...S.choices }; f.ext = { ...(S.ext || {}) };
+  bindFactory(); pruneFactoryChoices(); saveFS(); showFactory();
+  toast(`Usine partagée ouverte dans ${fLabel(f)} : ${n} pièce${n > 1 ? "s" : ""}.`);
+}
+const destDefault = () => (FS.list.length >= MAX_FACTORIES ? FS.cur : "new");
+function destAction(labelNew) {           // button label and warning for the chosen destination
+  const b = modal.querySelector("[data-maction]"), w = document.getElementById("dest-warn");
+  const f = FS.list.find((x) => x.id === dest.sel), repl = f && f.goals.length;
+  if (b) { b.textContent = !f ? labelNew : repl ? `Remplacer ${fLabelTxt(f)}` : `Ouvrir dans ${fLabelTxt(f)}`; b.classList.toggle("danger", !!repl); b.classList.toggle("primary", !repl); }
+  if (w) w.textContent = repl ? `${f.goals.length > 1 ? `Les ${f.goals.length} pièces` : "La pièce"} de ${fLabelTxt(f)}, ses recettes et ses réglages d'extraction seront remplacés. Cette action ne peut pas être annulée.` : "";
+}
+function applyShared(S) {                // a link opened in the address bar
+  showFactory();                          // replaces the address with #usine: a reload keeps the local factories
   if (!S) { toast("Ce lien de partage ne contient aucune pièce reconnue."); return; }
+  if (!FS.list.length) { dest.sel = "new"; dest.name = ""; applySharedTo(S); return; }
+  const same = FS.list.find((f) => sameFactory(f, S));
+  if (same) { setFactory(same.id); render(); toast(`${cap1(fLabel(same))} est déjà celle de ce lien.`); return; }
   const n = S.goals.length;
-  const apply = () => {
-    factory = S.goals;
-    for (const k in choiceF) delete choiceF[k];
-    Object.assign(choiceF, S.choices);
-    for (const k in extF) delete extF[k];
-    Object.assign(extF, S.ext || {});
-    pruneFactoryChoices(); saveFactory(); render();
-    toast(`Usine partagée ouverte : ${n} pièce${n > 1 ? "s" : ""}.`);
-  };
-  if (!factory.length) return apply();
-  if (shareCode(factory, choiceF, extF) === shareCode(S.goals, S.choices, S.ext)) { toast("Votre usine est déjà celle de ce lien."); return; }
   openModal({ title: "Ouvrir l'usine partagée ?", inline: true,
-    body: `<p>Le lien contient ${n} pièce${n > 1 ? "s" : ""} : ${S.goals.map((f) => esc(name(f.c))).join(", ")}.</p><p>${factory.length > 1 ? `Les ${factory.length} pièces` : "La pièce"} de votre usine, vos recettes et vos réglages d'extraction seront remplacés. Cette action ne peut pas être annulée.</p>`,
-    actions: [{ label: "Remplacer mon usine", kind: "danger", run: apply }] });
+    body: `<p>Le lien contient ${n} pièce${n > 1 ? "s" : ""} : ${S.goals.map((f) => esc(name(f.c))).join(", ")}.</p>${destHtml(destDefault())}<p class="note" id="dest-warn"></p><p class="immsg bad" id="dest-msg" aria-live="polite"></p>`,
+    actions: [{ label: "Ouvrir", kind: "primary", check: () => { const err = destErr(); modalMsg("dest-msg", err, true); return !err; }, run: () => applySharedTo(S) }] });
+  dest.changed = (extra) => { modalMsg("dest-msg", destErr() || extra || "", true); destAction("Ouvrir dans une nouvelle usine"); };
+  dest.changed();
 }
 
 /* "Importer": paste a share link in a dialog, checked while typing and again on "Importer" */
@@ -1027,15 +1120,17 @@ function shareFromText(t) {             // { S } for a valid link, { err } other
 function importFactory() {
   const canPaste = !!(navigator.clipboard && navigator.clipboard.readText && window.isSecureContext);
   let S = null;
+  const any = FS.list.length > 0;
   openModal({ title: "Importer une usine", inline: true,
-    body: `<p>Collez le lien obtenu avec « Partager ». Il remplace les pièces, débits et recettes choisies de votre usine.</p>
+    body: `<p>Collez le lien obtenu avec « Partager ». ${any ? "Choisissez ensuite l'usine qui le reçoit : une nouvelle, ou une usine existante qu'il remplace." : "Il crée votre première usine."}</p>
       <div class="imrow"><input class="share-url" id="import-url" type="text" autocomplete="off" spellcheck="false" placeholder="https://…#usine:…" aria-label="Lien de partage" aria-describedby="import-msg">${canPaste ? '<button class="btn" type="button" id="import-paste">Coller</button>' : ""}</div>
-      <p class="immsg" id="import-msg" aria-live="polite"></p>`,
-    actions: [{ label: "Importer", kind: "primary", disabled: true, check: () => !!(S = checkImport(true)), run: () => applyShared(S) }] });   // enabled only for a valid link   // run comes after the dialog is closed
+      <p class="immsg" id="import-msg" aria-live="polite"></p>${any ? `${destHtml(destDefault())}<p class="note" id="dest-warn"></p>` : ""}`,
+    // enabled only for a valid link; run comes after the dialog is closed
+    actions: [{ label: "Importer", kind: "primary", disabled: true, check: () => !!(S = checkImport(true)), run: () => { if (!any) { dest.sel = "new"; dest.name = ""; } applySharedTo(S); } }] });
   const inp = document.getElementById("import-url");
   inp.focus();
   inp.addEventListener("input", () => checkImport(false));
-  inp.addEventListener("keydown", (e) => { const b = modal.querySelector("[data-maction]"); if (e.key === "Enter") { e.preventDefault(); if (!b.disabled) b.click(); } });
+  if (any) { dest.changed = (extra) => { checkImport(false, extra); destAction("Importer"); }; destAction("Importer"); }
   const paste = document.getElementById("import-paste");
   if (paste) paste.addEventListener("click", () => navigator.clipboard.readText().then((t) => { inp.value = t.trim(); checkImport(true); inp.focus(); },
     () => { showImportMsg("Le presse-papiers n'est pas accessible : collez le lien avec Ctrl+V.", true); inp.focus(); }));
@@ -1047,23 +1142,31 @@ function showImportMsg(txt, bad, ok = false) {   // ok: valid link, "Importer" e
   const b = modal.querySelector("[data-maction]");
   if (b) b.disabled = !ok;
 }
-function checkImport(strict) {           // the parsed link, or null; strict: on "Importer" or "Coller", an empty field is an error too
+function checkImport(strict, extra) {    // the parsed link, or null; strict: on "Importer" or "Coller", an empty field is an error too
   const inp = document.getElementById("import-url");
   if (!inp) return null;
-  if (!strict && !inp.value.trim()) { showImportMsg("", false); return null; }
+  if (!strict && !inp.value.trim()) { showImportMsg(extra || "", !!extra); inp.classList.remove("bad"); return null; }
   const { S, err } = shareFromText(inp.value);
   if (err) { showImportMsg(err, true); if (strict) inp.focus(); return null; }
+  const dErr = destErr();                  // name of the new factory
+  if (dErr) {
+    showImportMsg(dErr, false); modalMsg("import-msg", dErr, true);
+    if (strict) document.getElementById("dest-name").focus();
+    return null;
+  }
   const n = S.goals.length;
+  if (extra) { showImportMsg(extra, false, true); modalMsg("import-msg", extra, true); return S; }   // e.g. the maximum of factories
   showImportMsg(`Lien valide : ${n} pièce${n > 1 ? "s" : ""} (${S.goals.map((f) => name(f.c)).join(", ")}).`, false, true);
   return S;
 }
 
 /* ---------- adding parts to the factory ---------- */
-function addGoal(c, amount) {
-  const f = factory.find((x) => x.c === c);
-  if (f) f.rate = clampRate(f.rate + amount); else factory.push({ c, rate: amount });
+function addGoal(c, amount) {             // into the active factory, created first when there is none
+  if (!curF()) createFactory();
+  const f = factory.find((x) => x.c === c), where = FS.list.length > 1 ? fLabel(curF()) : "votre usine";
+  if (f) f.rate = clampRate(f.rate + amount); else factory.push({ c, rate: clampRate(amount) });
   saveFactory();
-  return f ? `${esc(name(c))} passe à ${fmt(f.rate)}${unit(c)}/min dans votre usine.` : `Ajouté à votre usine : ${esc(name(c))}, ${fmt(amount)}${unit(c)}/min.`;
+  return f ? `${esc(name(c))} passe à ${fmt(f.rate)}${unit(c)}/min dans ${where}.` : `Ajouté à ${where} : ${esc(name(c))}, ${fmt(amount)}${unit(c)}/min.`;
 }
 function flashGoal(c, focus) {
   const row = document.getElementById("goalrow-" + c);
@@ -1072,11 +1175,116 @@ function flashGoal(c, focus) {
   row.classList.add("flash"); setTimeout(() => row.classList.remove("flash"), 1600);
   if (focus) { const i = document.getElementById("goal-" + c); if (i) { i.focus({ preventScroll: true }); i.select(); } }
 }
-function quickAdd(c) {
-  const msg = addGoal(c, 1);
-  if (view === "factory") { render(); flashGoal(c, false); }
-  else { const n = document.querySelector('.mode[data-view="factory"] .count'); if (n) n.textContent = factory.length; }
+/* Destination of an addition or an import: one of the factories, or a new one (name field), within the maximum.
+   dest.sel = factory id or "new"; dest.name = name of the new factory, read on validation (the dialog is gone when its
+   action runs); dest.changed() refreshes the dialog's message and button. Listeners: see the modal dialog. */
+const dest = { sel: null, name: "", changed: null };
+const cap1 = (s) => s[0].toUpperCase() + s.slice(1);
+function destHtml(sel) {
+  const full = FS.list.length >= MAX_FACTORIES;
+  dest.sel = sel === "new" && full ? FS.cur : sel;
+  dest.name = ""; dest.changed = null;
+  return `<div class="dest"><div class="lbl" id="dest-lbl">Usine</div><div class="fsel" role="group" aria-labelledby="dest-lbl">` +
+    FS.list.map((f) => `<button type="button" class="fbtn" data-dest="${f.id}" aria-pressed="${dest.sel === f.id}"><span class="fname">${esc(f.name)}</span></button>`).join("") +
+    `<button type="button" class="fbtn fnew" data-dest="new" aria-pressed="${dest.sel === "new"}" aria-disabled="${full}"${full ? ` data-tip="${FULL_TIP}"` : ""}>+ Nouvelle usine</button></div>
+    <label class="afield dest-name"${dest.sel === "new" ? "" : " hidden"}><span>Nom de la nouvelle usine</span><input id="dest-name" class="share-url" type="text" maxlength="${NAME_MAX}" autocomplete="off" value="${esc(defaultFactoryName())}"></label></div>`;
+}
+function destErr() {                     // error for the chosen destination ("" if fine); keeps the new name in dest.name
+  if (dest.sel !== "new") return "";
+  const i = document.getElementById("dest-name");
+  dest.name = i ? i.value : "";
+  return i ? factoryNameErr(i.value) : "";
+}
+function destApply() {                   // make the chosen destination the active factory
+  if (dest.sel === "new") createFactory(dest.name);
+  else if (FS.list.some((f) => f.id === dest.sel)) setFactory(dest.sel);
+  else if (!curF()) createFactory();
+}
+function onDestClick(b) {
+  if (b.getAttribute("aria-disabled") === "true") { if (dest.changed) dest.changed(FULL_TIP); return; }
+  dest.sel = b.dataset.dest === "new" ? "new" : +b.dataset.dest;
+  modal.querySelectorAll("[data-dest]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  const nl = modal.querySelector(".dest-name");
+  if (nl) nl.hidden = dest.sel !== "new";
+  if (dest.sel === "new") { const i = document.getElementById("dest-name"); i.focus(); i.select(); }
+  if (dest.changed) dest.changed();
+}
+function modalMsg(id, txt, bad) {
+  const m = document.getElementById(id);
+  if (m) { m.textContent = txt; m.classList.toggle("bad", !!bad); }
+}
+
+/* "+ Ajouter à mon usine" (part sheet and catalogue): rate and factory. The rate starts at 1/min, or at the output of
+   1 machine (standard recipe) when the sheet shows "Pour 1 machine/min". */
+function openAddDialog(c) {
+  const r = D.std[c];
+  if (!r) return;
+  const perM = outOf(c, r), u = unit(c);
+  const rate0 = qMode === "machine" ? clampRate(perM) : 1;
+  let v = rate0;
+  openModal({ title: "Ajouter à mon usine", inline: true,
+    body: `<div class="addhead">${icon(c)}<div><b>${esc(name(c))}</b><small>1 ${esc(mName(D.recipes[r].m))} (recette standard) produit <span class="num">${fmt(perM)}${u}/min</span></small></div></div>
+      <label class="afield"><span>Débit voulu</span><span class="g-rate"><input id="add-rate" type="text" inputmode="decimal" autocomplete="off" value="${fmtIn(rate0)}" aria-describedby="add-msg"> <span class="num">${u.trim()} / min</span></span></label>
+      ${FS.list.length ? destHtml(FS.cur) : ""}
+      <p class="immsg" id="add-msg" aria-live="polite"></p>`,
+    actions: [{ label: "Ajouter", kind: "primary",
+      check: () => { const ok = addCheck(c, true); if (ok) v = clampRate(parseNum(document.getElementById("add-rate").value)); return ok; },
+      run: () => { destApply(); afterAdd(c, addGoal(c, v)); } }] });
+  const inp = document.getElementById("add-rate");
+  dest.changed = (extra) => addCheck(c, false, extra);
+  inp.addEventListener("input", () => { sanitizeDec(inp); if (parseNum(inp.value) > MAX_RATE) inp.value = fmtIn(MAX_RATE); addCheck(c, false); });
+  inp.addEventListener("blur", () => { if (!(parseNum(inp.value) > 0)) { inp.value = fmtIn(rate0); addCheck(c, false); } });   // never left empty
+  addCheck(c, false);
+  inp.focus(); inp.select();
+}
+function addCheck(c, strict, extra) {    // message under the add dialog; strict (on "Ajouter"): focus the faulty field
+  const inp = document.getElementById("add-rate");
+  if (!inp) return false;
+  const v = parseNum(inp.value), u = unit(c), bad = !(v > 0);
+  const err = bad ? (strict || inp.value.trim() ? "Indiquez un débit supérieur à 0." : "") : destErr() || extra || "";
+  inp.classList.toggle("bad", bad && !!err);
+  if (err) {
+    modalMsg("add-msg", err, true);
+    if (strict) (bad ? inp : document.getElementById("dest-name") || inp).focus();
+    return false;
+  }
+  const f = dest.sel !== "new" && FS.list.find((x) => x.id === dest.sel), g = f && f.goals.find((x) => x.c === c);
+  modalMsg("add-msg", g && !bad ? `Déjà ${fmt(g.rate)}${u}/min dans cette usine : le débit passera à ${fmt(clampRate(g.rate + v))}${u}/min.` : "", false);
+  return !bad;
+}
+function afterAdd(c, msg) {
+  if (view === "item") { const n = document.querySelector('.mode[data-view="factory"] .count'); if (n) n.textContent = factory.length; }
+  else render();
+  if (view === "factory") flashGoal(c, false);
   toast(msg + (view === "factory" ? "" : ' <button class="link" data-view="factory">Voir mon usine</button>'));
+}
+function quickAdd(c) { openAddDialog(c); }
+
+/* Create or rename a factory: a name, unique among the factories */
+function nameDialog({ title, value, label, id, run }) {
+  let val = value;
+  openModal({ title, inline: true,
+    body: `<label class="afield"><span>Nom de l'usine</span><input id="fname" class="share-url" type="text" maxlength="${NAME_MAX}" autocomplete="off" value="${esc(value)}" aria-describedby="fname-msg"></label><p class="immsg" id="fname-msg" aria-live="polite"></p>`,
+    actions: [{ label, kind: "primary", check: () => {
+      const i = document.getElementById("fname"), err = factoryNameErr(i.value, id);
+      modalMsg("fname-msg", err, true); i.classList.toggle("bad", !!err);
+      if (err) i.focus(); else val = i.value.trim().slice(0, NAME_MAX);
+      return !err;
+    }, run: () => run(val) }] });
+  const i = document.getElementById("fname");
+  i.addEventListener("input", () => { const err = i.value.trim() ? factoryNameErr(i.value, id) : ""; modalMsg("fname-msg", err, true); i.classList.toggle("bad", !!err); });
+  i.focus(); i.select();
+}
+function newFactoryDialog() {
+  if (FS.list.length >= MAX_FACTORIES) { toast(FULL_TIP); return; }
+  nameDialog({ title: "Nouvelle usine", value: defaultFactoryName(), label: "Créer l'usine", id: null,
+    run: (nm) => { createFactory(nm); showFactory(); toast(`${cap1(fLabel(curF()))} a été créée.`); } });
+}
+function renameFactoryDialog() {
+  const f = curF();
+  if (!f) return;
+  nameDialog({ title: "Renommer l'usine", value: f.name, label: "Renommer", id: f.id,
+    run: (nm) => { f.name = nm; saveFS(); render(); const b = document.querySelector(`[data-fsel="${f.id}"]`); if (b) b.focus(); } });
 }
 
 /* toast */
@@ -1218,7 +1426,9 @@ function beltCalc(c, rate) {
   return { n: Math.ceil(rate / list[list.length - 1] - EPS), tier: names[names.length - 1], fl };
 }
 const beltTxt = (b) => `${b.n} ${b.fl ? (b.n > 1 ? "tuyaux" : "tuyau") : "tapis"} ${b.tier}`;
-const viaOf = (c) => { const v = T.via[c] || "belt"; return v === "drone" && D.items[c].fl ? "belt" : v; };
+/* Transport choice per resource: in Saisie libre, those of Transport; otherwise those of the active factory. */
+const viaMap = () => (view === "transport" && T.src === "free") || !curF() ? T.via : curF().via;
+const viaOf = (c) => { const v = viaMap()[c] || "belt"; return v === "drone" && D.items[c].fl ? "belt" : v; };
 function viaTxt(c, rate) {
   const v = viaOf(c);
   if (v === "train") { const t = trainCalc(c, rate); return `Train · ${t.trains > 1 ? `${t.trains} trains × ` : ""}${t.k} wagon${t.k > 1 ? "s" : ""}${t.mixed ? " (mixte)" : ""}`; }
@@ -1266,9 +1476,12 @@ function renderTransport() {
     <div class="seg" role="group" aria-label="Ressources à transporter"><button class="segb" data-tsrc2="free" aria-pressed="${T.src === "free"}">Saisie libre</button><button class="segb" data-tsrc2="factory" aria-pressed="${T.src === "factory"}">Ressources de Mon usine</button></div></section>
     <section>`;
   if (T.src === "factory") {
-    h += lines.length ? `<p class="note" style="margin:0 0 10px">Les débits viennent de Mon usine et suivent ses changements.</p><div class="goals">` +
+    const f = curF();
+    if (FS.list.length) h += `<div class="fbar tfbar"><span class="tlabel">Usine</span>${factoryTabs(false)}</div>`;
+    h += !f ? `<p class="note" style="margin:0">Vous n'avez pas encore d'usine. <button class="link" data-view="factory">Ouvrir Mon usine</button></p>`
+      : lines.length ? `<p class="note" style="margin:0 0 10px">Les débits viennent de ${fLabel(f)} et suivent ses changements ; les choix de transport sont gardés pour chaque usine.</p><div class="goals">` +
       lines.map((l) => `<div class="goal tline">${icon(l.c)}<div class="g-name"><button class="link" data-pick="${l.c}">${esc(name(l.c))}</button></div><span class="num">${fmt(l.rate)}${unit(l.c)}/min</span></div>`).join("") + `</div>`
-      : `<p class="note" style="margin:0">Votre usine n'a aucune ressource à amener. <button class="link" data-view="factory">Ouvrir Mon usine</button></p>`;
+      : `<p class="note" style="margin:0">${FS.list.length > 1 ? cap1(fLabel(f)) : "Votre usine"} n'a aucune ressource à amener. <button class="link" data-view="factory">Ouvrir Mon usine</button></p>`;
   } else {
     h += (lines.length ? `<div class="goals">` + lines.map((l, i) => `<div class="goal tline" id="tline-${l.c}">${icon(l.c)}<div class="g-name"><button class="link" data-pick="${l.c}">${esc(name(l.c))}</button></div>
         <label class="g-rate"><input type="text" inputmode="decimal" autocomplete="off" value="${fmtIn(l.rate)}" data-trate="${i}" id="trate-${l.c}" aria-label="Débit de ${esc(name(l.c))}"> <span class="num">${unit(l.c).trim() || ""} / min</span></label>
@@ -1430,7 +1643,7 @@ document.addEventListener("click", (e) => {
   const tm = t.closest("[data-tmixed]");
   if (tm) { T.mixed = tm.dataset.tmixed === "1"; saveT(); render(); return; }
   const vc = t.closest("[data-via]");
-  if (vc) { T.via[vc.dataset.viac] = vc.dataset.via; saveT(); updateTransport(); return; }
+  if (vc) { viaMap()[vc.dataset.viac] = vc.dataset.via; saveT(); saveFS(); updateTransport(); return; }
   const tr = t.closest("[data-tremove]");
   if (tr) { T.lines.splice(+tr.dataset.tremove, 1); saveT(); render(); }
 });
@@ -1458,12 +1671,21 @@ function closeModal() {
 modal.addEventListener("click", (e) => {
   const a = e.target.closest("[data-maction]");
   if (a) { const act = modal._actions[+a.dataset.maction]; if (act.check && !act.check()) return; closeModal(); act.run(); return; }
-  if (e.target.closest("[data-mclose]")) closeModal();
+  if (e.target.closest("[data-mclose]")) { closeModal(); return; }
+  const d = e.target.closest("[data-dest]");
+  if (d) onDestClick(d);
 });
+modal.addEventListener("input", (e) => { if (e.target.id === "dest-name" && dest.changed) dest.changed(); });
 modal.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { e.stopPropagation(); closeModal(); return; }
+  if (e.key === "Enter" && e.target.tagName === "INPUT" && !e.target.readOnly) {   // Enter in a field = the dialog's action
+    e.preventDefault();
+    const b = modal.querySelector("[data-maction]");
+    if (b && !b.disabled) b.click();
+    return;
+  }
   if (e.key === "Tab") {            // keep focus inside the dialog
-    const f = [...modal.querySelectorAll("button:not(:disabled), input")];
+    const f = [...modal.querySelectorAll("button:not(:disabled), input")].filter((x) => x.offsetParent !== null);
     const i = f.indexOf(document.activeElement);
     if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
     else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
@@ -1535,8 +1757,11 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip();
 
 fetch("assets/data.json").then((r) => r.json()).then((data) => {
   D = data;
-  for (const c in choiceF) if (choiceF[c] && !D.recipes[choiceF[c]]) delete choiceF[c];
-  factory = factory.filter((f) => D.items[f.c] && f.rate >= 0);
+  for (const f of FS.list) {               // drop parts and recipes this version of the data does not know
+    for (const c in f.choices) if (!D.items[c] || (f.choices[c] && !D.recipes[f.choices[c]])) delete f.choices[c];
+    f.goals = f.goals.filter((g) => D.items[g.c]);
+  }
+  bindFactory(); saveFS();
   const saved = store.get("sp-sel", null);
   sel = saved && D.items[saved] ? saved : "Desc_IronPlateReinforced_C";
   const t = fromHash();

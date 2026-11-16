@@ -35,7 +35,7 @@ npm test
 | Transport, Ressources de Mon usine, usines 1 (plaque de fer 20/min) et 2 (lingot d'aluminium 60/min) | usine 1 : Minerai de fer ; usine 2 : Bauxite, Eau, Charbon, Quartz brut ; le train choisi pour le minerai reste dans l'usine 1 seulement |
 | « + » du catalogue (Barre de fer) | survol du bouton, autre ligne, retour sur la ligne : fond normal, pas la couleur de survol ; fenêtre ouverte puis Annuler, pointeur sur une autre ligne : bouton caché |
 | Les trois vues à 390 px | aucun défilement horizontal |
-| Toutes les pages testées | aucune ressource en erreur HTTP (404…) ni échec réseau |
+| Toutes les pages testées | aucune ressource en erreur HTTP (404…) ni échec réseau ; le script Cloudflare Web Analytics se charge, ses envois vers `cloudflareinsights.com` sont simulés (refusés par CORS depuis localhost, et pas de visite de test dans les statistiques) |
 | Icônes référencées par `data.json` (`ico`) et `machines` | fichier présent dans `assets/images/` |
 
 Tout nouveau calcul ajoute un cas ici et dans `tests/smoke.js`, avec le détail du calcul à la main.

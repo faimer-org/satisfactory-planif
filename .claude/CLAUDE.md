@@ -14,7 +14,7 @@ Garder ces fichiers à jour avec le code ; ne pas remettre de détail technique 
 
 ## Règles de code
 
-- Pas de framework, pas de bundler, pas de dépendance d'exécution. Polices Google Fonts seulement.
+- Pas de framework, pas de bundler, pas de dépendance d'exécution. Ressources externes : polices Google Fonts et script de mesure d'audience Cloudflare Web Analytics (voir `docs/projet/publication.md`) seulement.
 - Trois fichiers de code : `index.html` (structure, à la racine), `assets/style.css`, `assets/app.js` (une IIFE, script classique) ; données et images dans `assets/`. Pas de découpage supplémentaire (modules ES, plusieurs scripts) sans l'accord de l'utilisateur.
 - Interface 100 % en français, noms officiels du jeu (`data.json` → `fr`). Nombres au format français (`fmt`, `fmtIn`, `parseNum`).
 - Couleurs uniquement via les variables CSS de `:root` (thème sombre unique, `color-scheme: dark`). Pas de thème clair, pas de `prefers-color-scheme` ni de `data-theme`.

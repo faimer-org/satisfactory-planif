@@ -69,6 +69,13 @@ async function open(browser, storage, hash, viewport) {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("response", (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`); });
   page.on("requestfailed", (r) => errors.push(`échec réseau ${r.url()}`));
+  // Mesure d'audience : le script se charge, mais ses envois sont simulés (refusés par CORS depuis
+  // localhost, et ils compteraient des visites de test dans les statistiques).
+  await page.route("https://cloudflareinsights.com/**", (route) =>
+    route.fulfill({ status: 204, headers: {
+      "Access-Control-Allow-Origin": route.request().headers().origin ?? "*",
+      "Access-Control-Allow-Credentials": "true",
+    } }));
   await page.addInitScript((s) => {
     localStorage.clear();
     for (const k in s) localStorage.setItem(k, JSON.stringify(s[k]));

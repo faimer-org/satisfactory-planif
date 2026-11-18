@@ -510,6 +510,19 @@ function checkImages() {
       await page.close();
     }
 
+    {
+      // catalogue search ignores accents and case, both ways: « boitier » finds « Boîtiers en aluminium », « PETROLE BRUT »
+      // and « pétrole brut » find « Pétrole brut »
+      const { page, errors } = await open(browser, {}, "");
+      await page.waitForSelector("#catlist .pick", { timeout: 10000 });
+      const found = async (q) => { await page.fill("#q", q); return page.$$eval("#catlist .pick", (els) => els.map((e) => e.dataset.pick)); };
+      const b = await found("boitier"), p = await found("PETROLE BRUT"), a = await found("pétrole brut");
+      check(b.includes("Desc_AluminumCasing_C") && JSON.stringify(p) === '["Desc_LiquidOil_C"]' && JSON.stringify(a) === '["Desc_LiquidOil_C"]',
+        `Catalogue · recherche sans accents : boitier → ${b.join(",")} ; PETROLE BRUT → ${p.join(",")} ; pétrole brut → ${a.join(",")}`);
+      if (errors.length) check(false, `Catalogue (recherche) · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+
     // No horizontal scroll at 390 px on any view (CLAUDE.md), with a factory large enough to fill the steps table.
     const big = { "sp-factory": [{ c: "Desc_ModularFrameHeavy_C", rate: 2 }, { c: "Desc_AluminumIngot_C", rate: 60 }] };
     for (const [label, hash] of [["Fiche pièce", "#desc-modularframeheavy-c"], ["Mon usine", "#usine"], ["Transport", "#transport"]]) {

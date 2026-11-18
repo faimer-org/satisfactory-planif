@@ -27,6 +27,9 @@ const openRows = new Set();
 const treeOpen = new Map();   // tree node "scope|path" → open; memory only, so re-renders keep what the user unfolded
 const uF = { q: "", cat: "", alt: true, ev: false };
 const hashOf = (c) => c.toLowerCase().replace(/_/g, "-");
+// search text: lower case, accents dropped (« boitier » finds « Boîtier », « petrole » finds « Pétrole »)
+const fold = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const hit = (it, q) => fold(it.fr).includes(q) || fold(it.en).includes(q);   // q already folded
 
 /* ---------- data helpers ---------- */
 const name = (c) => (D.items[c] ? D.items[c].fr : c);
@@ -179,11 +182,11 @@ function plan(targets, given = {}) {   // given: extra supply from outside the c
 
 /* ---------- catalogue ---------- */
 function renderCatalogue() {
-  const q = document.getElementById("q").value.trim().toLowerCase();
+  const q = fold(document.getElementById("q").value.trim());
   const groups = {};
   for (const c in D.items) {
     const it = D.items[c];
-    if (q && !(it.fr.toLowerCase().includes(q) || it.en.toLowerCase().includes(q))) continue;
+    if (q && !hit(it, q)) continue;
     (groups[it.cat] ||= []).push(c);
   }
   let h = "";
@@ -601,9 +604,9 @@ function filterBar(kind) {
   </div><div id="ulist">${kind === "uses" ? usesList(sel) : withoutList(sel)}</div>`;
 }
 const uMatch = (k) => {
-  const it = D.items[k], q = uF.q.trim().toLowerCase();
+  const it = D.items[k], q = fold(uF.q.trim());
   if (it.ev && !uF.ev && uF.cat !== it.cat) return false;   // FICSMAS hidden unless asked for
-  return (!uF.cat || it.cat === uF.cat) && (!q || it.fr.toLowerCase().includes(q) || it.en.toLowerCase().includes(q));
+  return (!uF.cat || it.cat === uF.cat) && (!q || hit(it, q));
 };
 const chipOf = (p, extra = "") => `<button class="chip" data-pick="${p}"${extra}>${icon(p, "sm")}${esc(name(p))}</button>`;
 function byStep(list, empty) {
@@ -1306,12 +1309,12 @@ ipick.id = "ipick"; ipick.hidden = true;
 document.body.appendChild(ipick);
 let ipBtn = null, ipMode = "f";
 function pickerList(q) {
-  q = q.trim().toLowerCase();
+  q = fold(q.trim());
   const groups = {};
   for (const c in D.items) {
     const it = D.items[c];
     if (!D.std[c] && !(ipMode === "t" && it.raw)) continue;
-    if (q && !(it.fr.toLowerCase().includes(q) || it.en.toLowerCase().includes(q))) continue;
+    if (q && !hit(it, q)) continue;
     (groups[it.cat] ||= []).push(c);
   }
   let h = "";

@@ -8,7 +8,7 @@ Usage (from the repository root):
 
 What it does:
 - recipes made in production machines (en + fr names, duration, power, inputs, outputs; fluids in m³)
-- alternate flag: recipe unlocked only by hard-drive schematics (EST_Alternate) or named Recipe_Alternate_*
+- alternate flag: recipe shown by the game as "Alternate: …"; mam flag when M.A.M. research unlocks it, not a hard drive
 - default ("std") recipe per item and the list of every recipe producing it ("opts")
 - items: en/fr names, fluid, raw resource, stack size, sink points, category, FICSMAS flag
 - categories come from scripts/categories.json; unknown new items go to "Autres" (edit the file to place them)
@@ -62,9 +62,14 @@ for c in EN['FGRecipe']:
         continue
     mw = (float(c['mVariablePowerConsumptionConstant']) + float(c['mVariablePowerConsumptionFactor']) / 2) if machines[m]['var'] else machines[m]['mw']
     rid, types = c['ClassName'], unlock.get(c['ClassName'], set())
-    recipes[rid] = dict(en=c['mDisplayName'], fr=fr_name.get(rid) or c['mDisplayName'],
-                        alt=('_Alternate_' in rid) or (bool(types) and types <= {'EST_Alternate'}),
+    # Alternate = what the game shows as such ("Alternate: …"). Not the class name: Recipe_Alternate_Turbofuel_C is the
+    # standard Turbofuel recipe, shown as "Turbofuel" and unlocked by the M.A.M. (Sulfur research).
+    alt = c['mDisplayName'].startswith('Alternate:')
+    recipes[rid] = dict(en=c['mDisplayName'], fr=fr_name.get(rid) or c['mDisplayName'], alt=alt,
                         m=m, t=t, mw=round(mw, 2), i=ins, o=outs)
+    # alternate unlocked by M.A.M. research, not by a hard drive (Compacted Coal, Polyester Fabric)
+    if alt and 'EST_MAM' in types and 'EST_Alternate' not in types:
+        recipes[rid]['mam'] = True
 
 used = set()
 for r in recipes.values():
@@ -157,7 +162,7 @@ data = dict(
               source='Fichiers du jeu CommunityResources/Docs (en-US.json, fr.json)',
               icons='Icônes 64 px issues du projet SatisfactoryTools (ressources du jeu, © Coffee Stain Studios)',
               format={'items': 'classe -> {en, fr, fl (fluide), raw (ressource brute), ico, sink, cat, st (taille de pile ; fluides en litres), ev (FICSMAS), ws (recette standard de l\'atelier, sans recette standard en machine)}',
-                      'recipes': 'classe -> {en, fr, alt, m (machine), t (s par cycle), mw (MW moyens à 100 %), i/o: [[objet, quantité par cycle]] ; fluides en m³}',
+                      'recipes': 'classe -> {en, fr, alt, mam (alternative du M.A.M.), m (machine), t (s par cycle), mw (MW moyens à 100 %), i/o: [[objet, quantité par cycle]] ; fluides en m³}',
                       'std': 'objet -> recette par défaut', 'opts': 'objet -> toutes les recettes qui le produisent',
                       'machines': 'classe -> nom français', 'cats': 'ordre des catégories du catalogue',
                       'extractors': 'classe -> {fr, mw, rate (/min à 100 % sur gisement normal), pur (pureté applicable), res ("solid" ou [ressources]), press (pressuriseur)}'}),

@@ -417,6 +417,23 @@ function checkImages() {
       if (errors.length) check(false, `Menu des recettes · gain · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
+    // The recipe menu offers only recipes whose main output is the part: no Ionized Fuel or Rocket Fuel for Compacted
+    // Coal. A by-product recipe saved before is dropped on load: 25/min with Alt. Charbon compacté (5 coal + 5 sulfur → 5)
+    // = 25 coal + 25 sulfur.
+    {
+      const { page, errors } = await open(browser, { "sp-factory": [{ c: "Desc_CompactedCoal_C", rate: 25 }],
+        "sp-choice-f": { Desc_CompactedCoal_C: "Recipe_IonizedFuel_C" } }, "#usine");
+      await page.waitForSelector(".raws .raw", { timeout: 10000 });
+      const raws = await page.$$eval(".raws .raw", (els) => els.map((e) => e.querySelector("button.link")?.textContent.trim() + " " + e.querySelector("b")?.textContent.trim()).join(", "));
+      const saved = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("sp-factories")).list[0].choices));
+      await page.click("#goal-r-Desc_CompactedCoal_C");
+      await page.waitForSelector("#rmenu .ropt", { timeout: 10000 });
+      const menu = await page.$$eval("#rmenu .ropt .ro-nm", (os) => os.map((o) => o.textContent).join(" | "));
+      check(raws === "Charbon 25 / min, Soufre 25 / min" && saved === "{}" && menu === "Charbon compacté | Fourni de l'extérieur",
+        `Menu des recettes · Charbon compacté sans recette de sous-produit : ressources ${raws}, choix enregistrés ${saved}, menu ${menu}`);
+      if (errors.length) check(false, `Menu des recettes · sous-produit · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
 
     // Several factories (sp-factories). Iron plate, standard recipe: 2 plates every 6 s in a Constructor = 20/min per machine.
     const FSK = () => JSON.parse(localStorage.getItem("sp-factories"));

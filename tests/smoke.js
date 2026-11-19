@@ -188,6 +188,7 @@ function checkImages() {
       const ore = await page.$$eval(".raws .raw", (els) => els.find((e) => e.querySelector("button.link")?.textContent.trim() === "Minerai de fer")?.querySelector("b").textContent);
       check(ore && Math.abs(num(ore) - 341.54) < 0.01, `Lien partagé (lingot de fer pur) · minerai de fer : attendu 341,54, obtenu ${ore}`);
       check(await page.evaluate(() => location.hash) === "#usine", "Lien partagé · l'adresse redevient #usine");
+      check(await page.evaluate(() => history.length) === 2, "Lien partagé · #usine remplace le lien dans l'historique (Précédent ne le rouvre pas)");
       // the "Partager" button rebuilds the same code (clipboard, or the fallback dialog)
       await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
       await page.click("[data-share]");
@@ -340,6 +341,29 @@ function checkImages() {
       const again = await bypOpen();
       check(kept === true && again === false, `Fiche Eau · section dépliée gardée après Mon usine (${kept}), refermée après une autre fiche (${again})`);
       if (errors.length) check(false, `Fiche Eau · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+
+    // Browser history: each part sheet, Mon usine and Transport add an entry, so Back returns to the previous screen;
+    // the first screen at load replaces its entry (no extra step back).
+    {
+      const { page, errors } = await open(browser, {}, "#desc-ironplate-c");
+      await page.waitForFunction(() => document.querySelector(".sheet h2")?.textContent === "Plaque de fer", null, { timeout: 10000 });
+      const len0 = await page.evaluate(() => history.length);
+      await page.click('.pick[data-pick="Desc_IronRod_C"]');
+      await page.click('.modes [data-view="factory"]');
+      await page.click('.modes [data-view="transport"]');
+      const len1 = await page.evaluate(() => history.length);
+      const seen = [];
+      for (let i = 0; i < 3; i++) {
+        await page.goBack({ waitUntil: "commit" });
+        await page.waitForTimeout(150);
+        seen.push(await page.evaluate(() => location.hash + " " + document.querySelector('.mode[aria-selected="true"]').textContent.trim()));
+      }
+      const want = ["#usine Mon usine 0", "#desc-ironrod-c Fiche pièce · Barre de fer", "#desc-ironplate-c Fiche pièce · Plaque de fer"];
+      check(len1 - len0 === 3 && JSON.stringify(seen) === JSON.stringify(want),
+        `Historique · 3 entrées ajoutées (${len1 - len0}), Précédent : attendu ${JSON.stringify(want)}, obtenu ${JSON.stringify(seen)}`);
+      if (errors.length) check(false, `Historique · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
 

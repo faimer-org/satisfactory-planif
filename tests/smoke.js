@@ -366,6 +366,31 @@ function checkImages() {
       await page.close();
     }
 
+    // Trees: an alternative recipe shows its output per machine compared with the standard one, like the item sheet.
+    // Pure Iron Ingot: 13 ingots / 12 s = 65/min per Refinery; standard: 1 / 2 s = 30/min per Smelter → ×2,17.
+    {
+      const { page, errors } = await open(browser, { "sp-factory": [{ c: "Desc_IronIngot_C", rate: 65 }, { c: "Desc_IronPlate_C", rate: 20 }],
+        "sp-choice-f": { Desc_IronIngot_C: "Recipe_Alternate_PureIronIngot_C" }, "sp-tab-f": "tree" }, "#usine");
+      await page.waitForSelector(".tree details", { timeout: 10000 });
+      const tags = await page.$$eval(".tree > details > summary", (ss) => ss.map((s) => {
+        const t = s.querySelector(".row > .tag");
+        return `${s.parentElement.dataset.k}=${t ? t.textContent : "-"}`;
+      }).join());
+      check(tags === "Desc_IronIngot_C=×2,17 par machine,Desc_IronPlate_C=-", `Arbres · gain de la recette alternative : ${tags}`);
+      const sub = await page.$eval('.tree details[data-p="Desc_IronPlate_C,Desc_IronIngot_C"] > summary .row > .tag', (t) => t.textContent).catch(() => null);
+      check(sub === "×2,17 par machine", `Arbres · gain sur un nœud intermédiaire (Lingot de fer sous Plaque de fer) : ${sub}`);
+      // same tag in the recipe menu: basic 50/min (×1,67), alloy 75/min (×2,5), leached 100/min (×3,33), pure 65/min (×2,17)
+      await page.click("#goal-r-Desc_IronIngot_C");
+      await page.waitForSelector("#rmenu .ropt", { timeout: 10000 });
+      const menu = await page.$$eval("#rmenu .ropt", (os) => os.map((o) => {
+        const t = [...o.querySelectorAll(".ro-name > .tag")].find((x) => /machine|standard/.test(x.textContent));
+        return t ? t.textContent : "-";
+      }).join(" | "));
+      check(menu === "- | ×1,67 par machine | ×2,5 par machine | ×3,33 par machine | ×2,17 par machine | -", `Menu des recettes · gain par machine : ${menu}`);
+      if (errors.length) check(false, `Arbres · gain · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+
     // Several factories (sp-factories). Iron plate, standard recipe: 2 plates every 6 s in a Constructor = 20/min per machine.
     const FSK = () => JSON.parse(localStorage.getItem("sp-factories"));
     const fsSummary = (page) => page.evaluate(() => { const s = JSON.parse(localStorage.getItem("sp-factories")); return s.list.map((f) => `${f.id === s.cur ? "*" : ""}${f.name}:` + f.goals.map((g) => g.c.replace(/Desc_|_C/g, "") + "*" + g.rate).join("+")).join(" "); });

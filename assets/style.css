@@ -225,8 +225,8 @@ h3.uh { font-size: 20px; margin-bottom: 8px; }
 .ropt:hover, .ropt:focus { background: var(--sunk); outline: none; border-color: var(--rust); }
 .ropt:focus-visible { border-color: var(--rust); }
 .ropt[aria-selected="true"] { background: var(--rust-soft); border-color: var(--rust); }
-.ro-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.ro-name > span:nth-child(2), .ro-name > span:only-child { flex: 1; min-width: 0; }
+.ro-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-weight: 600; }
+.ro-name > .ro-nm { flex: 1 1 10em; min-width: 0; }   /* the gain tag goes to the next line rather than squeezing the name */
 .ro-cur { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--rust); }
 .tag.std { color: var(--ok); }
 .ro-mach { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }

@@ -366,7 +366,7 @@ function optionHtml(c, r, cur, idx) {
       <div class="ro-flow"><div class="ro-col">${R.i.map((e) => it(e)).join("")}</div><span class="ro-arrow" aria-hidden="true">→</span><div class="ro-col">${R.o.map((e) => it(e, e[0] === c)).join("")}</div></div>`;
   } else body = `<div class="ro-mach"><span>${D.items[c].raw ? "Ressource à amener, aucune machine." : "Arrive de l'extérieur, non calculée."}</span></div>`;
   const tag = L.tag === "std" ? '<span class="tag std">Standard</span>' : L.tag === "alt" ? '<span class="tag alt">Alt.</span>' : "";
-  return `<div class="ropt" role="option" id="ro-${idx}" data-val="${r}" aria-selected="${r === cur}" tabindex="-1"><div class="ro-name">${tag}<span>${esc(L.name)}</span>${r === cur ? '<span class="ro-cur">Utilisée</span>' : ""}</div>${body}</div>`;
+  return `<div class="ropt" role="option" id="ro-${idx}" data-val="${r}" aria-selected="${r === cur}" tabindex="-1"><div class="ro-name">${tag}<span class="ro-nm">${esc(L.name)}</span>${r ? speedTag(c, r) : ""}${r === cur ? '<span class="ro-cur">Utilisée</span>' : ""}</div>${body}</div>`;
 }
 /* custom listbox for recipes */
 const rmenu = document.createElement("div");
@@ -581,7 +581,7 @@ function treeNode(k, q, depth, path, sc) {   // sc: tree scope, "t" (Arbres tab)
   if (made <= EPS) return `<div class="leaf">${lab}<span class="rest">entièrement couvert, rien à fabriquer</span></div>`;
   const R = D.recipes[r], n = made / perMin(r, k, "o"), p = path.concat(k).join(",");
   const st = treeOpen.get(sc + "|" + p), open = st === undefined ? depth === 0 : st;   // by default only the first level below a tree is shown
-  return `<details data-k="${k}" data-q="${made}" data-d="${depth}" data-s="${sc}" data-p="${p}"${open ? " open" : ""}><summary><span class="row">${lab}<span class="mk">${mIcon(R.m)}<span class="num q">${fmt(n)} × ${esc(mName(R.m))}</span>${R.alt ? '<span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>' : ""}</span>${rec > EPS ? `<span class="rest">pour les <span class="num">${fmt(made)}${unit(k)}/min</span> restants</span>` : ""}</span></summary>${open ? treeKids(k, made, depth, path.concat(k), sc) : ""}</details>`;
+  return `<details data-k="${k}" data-q="${made}" data-d="${depth}" data-s="${sc}" data-p="${p}"${open ? " open" : ""}><summary><span class="row">${lab}<span class="mk">${mIcon(R.m)}<span class="num q">${fmt(n)} × ${esc(mName(R.m))}</span>${R.alt ? '<span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>' : ""}</span>${speedTag(k, r)}${rec > EPS ? `<span class="rest">pour les <span class="num">${fmt(made)}${unit(k)}/min</span> restants</span>` : ""}</span></summary>${open ? treeKids(k, made, depth, path.concat(k), sc) : ""}</details>`;
 }
 function treeKids(k, q, depth, path, sc) {
   const r = recipeOf(k), R = D.recipes[r], n = q / perMin(r, k, "o");

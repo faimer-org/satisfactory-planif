@@ -27,3 +27,5 @@ Anciennes clés, lues une seule fois quand `sp-factories` n'existe pas encore, p
 ## Ancres
 
 `#usine`, `#transport`, `#desc-ironplate-c` (fiche), `#usine:…` (usine partagée, voir [partage-url.md](partage-url.md)).
+
+Chaque écran ouvert (fiche d'une pièce, Mon usine, Transport) ajoute une entrée à l'historique du navigateur (`history.pushState` dans `setHash`) : le bouton Précédent revient à l'écran d'avant, affiché par l'écouteur `hashchange`. Deux exceptions remplacent l'entrée courante (`replaceState`) : le premier écran au chargement (pas d'étape de retour en trop) et le `#usine` qui remplace un lien partagé (Précédent ne rouvre pas le lien).

@@ -819,7 +819,11 @@ function render() {
 }
 
 /* ---------- interactions ---------- */
-function setHash(h) { try { if (location.hash !== "#" + h) history.replaceState(null, "", "#" + h); } catch (e) {} }
+/* Each screen the user opens (a part's sheet, Mon usine, Transport) adds a history entry, so the browser's Back button
+   returns to the previous one (hashchange then shows it). The first screen at load and the #usine that replaces a shared
+   link replace the entry instead: no extra step back, and Back never reopens the link. */
+let navPush = false;
+function setHash(h) { try { if (location.hash !== "#" + h) history[navPush ? "pushState" : "replaceState"](null, "", "#" + h); } catch (e) {} }
 function select(c) {
   if (!D.items[c]) return;
   if (c !== sel) othersOpen.main = othersOpen.byp = false;   // another part: its recipe groups start folded (kept when coming back from Mon usine or Transport)
@@ -1096,7 +1100,8 @@ function destAction(labelNew) {           // button label and warning for the ch
   if (w) w.textContent = repl ? `${f.goals.length > 1 ? `Les ${f.goals.length} pièces` : "La pièce"} de ${fLabelTxt(f)}, ses recettes et ses réglages d'extraction seront remplacés. Cette action ne peut pas être annulée.` : "";
 }
 function applyShared(S) {                // a link opened in the address bar
-  showFactory();                          // replaces the address with #usine: a reload keeps the local factories
+  const push = navPush; navPush = false;  // replaces the address with #usine: a reload keeps the local factories
+  showFactory(); navPush = push;
   if (!S) { toast("Ce lien de partage ne contient aucune pièce reconnue."); return; }
   if (!FS.list.length) { dest.sel = "new"; dest.name = ""; applySharedTo(S); return; }
   const same = FS.list.find((f) => sameFactory(f, S));
@@ -1777,6 +1782,7 @@ fetch("assets/data.json").then((r) => r.json()).then((data) => {
   else if (t === "share") openShared();
   else if (t === "usine" || (!t && sv === "factory")) showFactory();
   else select(t || sel);
+  navPush = true;
 }).catch(() => {
   document.getElementById("sheet").innerHTML = `<div class="card"><section><p>Les données n'ont pas pu être chargées. Rechargez la page.</p></section></div>`;
 });

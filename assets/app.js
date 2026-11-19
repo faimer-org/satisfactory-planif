@@ -44,6 +44,9 @@ const noStd = (c) => !D.items[c].raw && (!D.std[c] || D.recipes[D.std[c]].alt);
 const mainAlts = (c) => (D.opts[c] || []).filter((r) => D.recipes[r].alt && D.recipes[r].o[0][0] === c);
 const bypOf = (c) => (D.opts[c] || []).filter((r) => D.recipes[r].o[0][0] !== c);
 const isByp = (c) => noStd(c) && bypOf(c).length > 0;
+/* "Alt." tag of alternate recipes; its tooltip says how the recipe is unlocked: a hard drive, or M.A.M. research (mam) */
+const altTip = (rs) => `Recette alternative, débloquée ${rs.every((r) => D.recipes[r].mam) ? "par une recherche du M.A.M." : "avec un disque dur"}`;
+const altTag = (rs) => `<span class="tag alt" data-tip="${altTip(rs)}">Alt.</span>`;
 const perMin = (r, c, side) => { const R = D.recipes[r]; const e = R[side].find((x) => x[0] === c); return e ? e[1] * 60 / R.t : 0; };
 const mName = (m) => D.machines[m] || m;
 const mIcon = (m) => `<img class="ico sm mico" src="assets/images/machines/${m}.png" alt="" loading="lazy" width="64" height="64">`;
@@ -459,7 +462,7 @@ function choiceNote() {
   return `<div class="choices"><div class="choices-head"><p class="note">${k.length} recette${s} modifiée${s} :</p><button class="btn" data-reset="1">Revenir aux recettes standard</button></div><div class="chips">` +
     k.map((x) => {
       const R = choice[x] ? D.recipes[choice[x]] : null;
-      return `<span class="chip cchip">${icon(x, "sm")}<button class="link" data-pick="${x}">${esc(name(x))}</button>${R && R.alt ? ' <span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>' : ""}<button class="cx" type="button" data-unchoose="${x}" aria-label="Revenir à la recette standard pour ${esc(name(x))}">×</button></span>`;
+      return `<span class="chip cchip">${icon(x, "sm")}<button class="link" data-pick="${x}">${esc(name(x))}</button>${R && R.alt ? " " + altTag([choice[x]]) : ""}<button class="cx" type="button" data-unchoose="${x}" aria-label="Revenir à la recette standard pour ${esc(name(x))}">×</button></span>`;
     }).join("") + `</div></div>`;
 }
 
@@ -527,7 +530,7 @@ function stepsHtml(P, targets) {
     const q = n * perMin(r, k, "o");
     const sur = surplusOf(P, k);
     const isOpen = openRows.has(k);
-    h += `<tr id="row-${k}" class="${isOpen ? "xopen" : ""}"><td><div class="it"><button class="xp" data-xp="${k}" aria-expanded="${isOpen}" aria-label="${isOpen ? "Replier" : "Déplier"} le détail de ${esc(name(k))}"><span aria-hidden="true">▸</span></button>${icon(k, "sm")}<button class="link" data-pick="${k}">${esc(name(k))}</button>${tset.has(k) ? ' <span class="tag tgt" data-tip="Pièce demandée dans votre usine">Objectif</span>' : ""}${R.alt ? ' <span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>' : ""}</div></td>
+    h += `<tr id="row-${k}" class="${isOpen ? "xopen" : ""}"><td><div class="it"><button class="xp" data-xp="${k}" aria-expanded="${isOpen}" aria-label="${isOpen ? "Replier" : "Déplier"} le détail de ${esc(name(k))}"><span aria-hidden="true">▸</span></button>${icon(k, "sm")}<button class="link" data-pick="${k}">${esc(name(k))}</button>${tset.has(k) ? ' <span class="tag tgt" data-tip="Pièce demandée dans votre usine">Objectif</span>' : ""}${R.alt ? " " + altTag([r]) : ""}</div></td>
       <td class="r num">${fmt(q)}${unit(k)}/min${sur.map(([b, v]) => `<small class="sur" data-tipitem="${b}">+ ${fmt(v)}${unit(b)} ${esc(name(b))} en surplus</small>`).join("")}</td><td>${machinesTxt(n, R.m)}</td><td class="r num">${fmt(n * R.mw)}</td>
       <td>${recipeSelect(k, "rs-" + k)}</td></tr>`;
     if (isOpen) h += `<tr class="xrow"><td colspan="5">${rowDetail(P, k, q)}</td></tr>`;
@@ -632,7 +635,7 @@ function usesList(c) {
   h += prods.length ? `<div class="chips">` + prods.map((p) => {
     const rs = direct.filter((r) => D.recipes[r].o[0][0] === p);
     const alt = rs.every((r) => D.recipes[r].alt);
-    return `<button class="chip" data-pick="${p}" data-tip-extra="${esc((rs.length > 1 ? "Recettes : " : "Recette : ") + rs.map((r) => (D.recipes[r].alt ? "Alt. " : "") + D.recipes[r].fr.replace(/\s*\(alternative\)\s*$/i, "")).join(" · "))}">${icon(p, "sm")}${esc(name(p))}${alt ? ' <span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>' : ""}</button>`;
+    return `<button class="chip" data-pick="${p}" data-tip-extra="${esc((rs.length > 1 ? "Recettes : " : "Recette : ") + rs.map((r) => (D.recipes[r].alt ? "Alt. " : "") + D.recipes[r].fr.replace(/\s*\(alternative\)\s*$/i, "")).join(" · "))}">${icon(p, "sm")}${esc(name(p))}${alt ? " " + altTag(rs) : ""}</button>`;
   }).join("") + `</div>` : `<p class="empty">Aucune pièce ne correspond.</p>`;
   const dep = Object.keys(D.items).filter((k) => k !== c && recipeOf(k) && needs(k, c) && uMatch(k));
   h += `<h3 class="uh" style="margin-top:20px">Tout ce qui en dépend, avec vos recettes actuelles · ${dep.length}</h3>`;
@@ -696,7 +699,7 @@ function rawLine(c, r) {              // raw resources for 1 part (or 1 machine)
 }
 function recipeCard(c, r) {
   const R = D.recipes[r], byp = R.o.filter(([o]) => o !== c);
-  const tag = R.alt ? '<span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>'
+  const tag = R.alt ? altTag([r])
     : r === D.std[c] ? '<span class="tag std">Standard</span>' : "";
   return `<div class="rcard${R.alt ? " alt" : ""}">
     <div class="rc-head">${tag}<b>${esc(recipeLabel(c, r).name)}</b><span class="rc-mach">${mIcon(R.m)}${esc(mName(R.m))} · 1 machine produit <span class="num">${outTxt(c, r)}</span>${speedTag(c, r)}</span></div>

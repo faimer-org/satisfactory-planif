@@ -28,11 +28,11 @@ const FACTORY_CASES = [
   { name: "Sculptrice biochimique 2/min : lingot de ficsite à l'aluminium par défaut", factory: [{ c: "Desc_SpaceElevatorPart_10_C", rate: 2 }],
     expect: { "Minerai de fer": 262.5, "É.M.E.": 106.67, "Bauxite": 53.33, "Quartz brut": 26.67, "Charbon": 139.17, "Eau": 63.33 } },
   // Rocket Fuel 100 m³/min: 1 Blender (6 turbofuel + 1 nitric acid → 10 rocket fuel + 1 compacted coal per 6 s) needs 60 m³
-  // turbofuel, 10 m³ nitric acid and gives 10 compacted coal. Turbofuel by default = Alt. Turbocarburant (6 fuel + 4 compacted
+  // turbofuel, 10 m³ nitric acid and gives 10 compacted coal. Turbofuel: standard Turbocarburant (6 fuel + 4 compacted
   // coal → 5 per 16 s): 60/18,75 = 3,2 refineries → 72 m³ fuel, 48 compacted coal, minus the 10 recovered = 38 → Alt. Charbon
   // compacté: 38 coal + 38 sulfur. Fuel (6 oil → 4 fuel + 3 resin per 6 s): 108 m³ oil. Nitric acid (12 nitrogen + 3 water
   // + 1 iron plate → 3 per 6 s): 40 m³ nitrogen, 10 m³ water, 3,33 plates → 5 iron ingots → 5 ore.
-  { name: "Carburant de fusée 100 m³/min : turbocarburant et charbon compacté en recette alternative par défaut",
+  { name: "Carburant de fusée 100 m³/min : charbon compacté en recette alternative par défaut",
     factory: [{ c: "Desc_RocketFuel_C", rate: 100 }],
     expect: { "Pétrole brut": 108, "Azote": 40, "Charbon": 38, "Soufre": 38, "Eau": 10, "Minerai de fer": 5 } },
 ];
@@ -70,7 +70,7 @@ const num = (s) => parseFloat(s.replace(/\s/g, "").replace(",", "."));
 let failed = 0;
 const check = (ok, msg) => { if (!ok) failed++; console.log(`${ok ? "OK  " : "FAIL"} ${msg}`); };
 
-async function open(browser, storage, hash, viewport) {
+async function open(browser, storage, hash, viewport, prep) {   // prep(page): before loading (routes)
   const page = await browser.newPage(viewport ? { viewport } : {});
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -88,6 +88,7 @@ async function open(browser, storage, hash, viewport) {
     localStorage.clear();
     for (const k in s) localStorage.setItem(k, JSON.stringify(s[k]));
   }, storage);
+  if (prep) await prep(page);
   await page.goto(URL + hash);
   return { page, errors };
 }
@@ -475,6 +476,26 @@ function checkImages() {
       await page.close();
     }
     {
+      // Turbofuel: its recipe Recipe_Alternate_Turbofuel_C is standard in the game ("Turbofuel", M.A.M. Sulfur research):
+      // a normal sheet, 5 / 16 s = 18,75 m³/min per Refinery. Alt. Charbon compacté is unlocked by the M.A.M., not a hard drive.
+      const { page, errors } = await open(browser, { "sp-qmode": "unit" }, "#desc-liquidturbofuel-c");
+      await page.waitForSelector(".head + section .made", { timeout: 10000 });
+      const made = await page.$eval(".head + section .made", (e) => e.innerText.replace(/\s+/g, " ").trim());
+      const badge = await page.$$eval(".head h2 .tag", (t) => t.length);
+      check(made === "Raffinerie Recette standard · 1 machine produit 18,75 m³/min" && badge === 0,
+        `Fiche Turbocarburant · recette standard : « ${made} », étiquettes ${badge}`);
+      await page.goto(URL + "#desc-compactedcoal-c");
+      await page.waitForSelector("details.others .rcard .tag.alt", { state: "attached", timeout: 10000 });
+      const tipC = await page.$eval("details.others .rcard .tag.alt", (t) => t.dataset.tip);
+      await page.goto(URL + "#desc-ironingot-c");
+      await page.waitForSelector("details.others .rcard .tag.alt", { state: "attached", timeout: 10000 });
+      const tipI = await page.$eval("details.others .rcard .tag.alt", (t) => t.dataset.tip);
+      check(tipC === "Recette alternative, débloquée par une recherche du M.A.M." && tipI === "Recette alternative, débloquée avec un disque dur",
+        `Infobulle Alt. · Charbon compacté « ${tipC} », Lingot de fer « ${tipI} »`);
+      if (errors.length) check(false, `Fiche Turbocarburant · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
       // Blue Power Slug: everything that depends on it goes through the Power Shard; Compacted Coal no longer does
       const { page, errors } = await open(browser, {}, "#desc-crystal-c");
       await page.waitForSelector("#ulist .chip", { timeout: 10000 });
@@ -485,9 +506,16 @@ function checkImages() {
       await page.close();
     }
     {
-      // Turbofuel: no standard recipe, 3 alternates (per machine: Turbocarburant 5 / 16 s = 18,75 m³/min, mélangé
-      // 45 m³/min, lourd 30 m³/min). The dialog asks which one; the choice goes to the factory, the rate follows it.
-      const { page, errors } = await open(browser, { "sp-qmode": "machine" }, "#desc-liquidturbofuel-c");
+      // A part with no standard recipe and several alternates: no such part in 1.2, so the data is changed for the test:
+      // Turbocarburant (standard, Recipe_Alternate_Turbofuel_C) marked alternate. 3 alternates then (per machine:
+      // Turbocarburant 5 / 16 s = 18,75 m³/min, mélangé 45 m³/min, lourd 30 m³/min). The dialog asks which one; the choice
+      // goes to the factory, the rate follows it.
+      const asAlt = (page) => page.route("**/assets/data.json", async (route) => {
+        const d = await (await route.fetch()).json();
+        d.recipes.Recipe_Alternate_Turbofuel_C.alt = true;
+        route.fulfill({ json: d });
+      });
+      const { page, errors } = await open(browser, { "sp-qmode": "machine" }, "#desc-liquidturbofuel-c", null, asAlt);
       await page.waitForSelector(".head [data-quickadd]", { timeout: 10000 });
       await page.click(".head [data-quickadd]");
       const opts = await page.$$eval("#modal .rlist .ropt", (els) => els.map((e) => e.querySelector(".ro-nm").textContent + (e.getAttribute("aria-selected") === "true" ? "*" : "")).join(","));

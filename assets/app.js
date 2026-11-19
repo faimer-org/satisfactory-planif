@@ -353,12 +353,15 @@ function recipeLabel(c, r) {
   const R = D.recipes[r];
   return { tag: R.alt ? "alt" : r === D.std[c] ? "std" : "", name: R.fr.replace(/\s*\(alternative\)\s*$/i, ""), m: R.m };
 }
+/* Recipes Mon usine can choose for c: only those whose main output is c. A recipe that gives c as a by-product is
+   never offered: planning c with it would run machines for another part (Compacted Coal from Ionized Fuel). */
+const mainOpts = (c) => (D.opts[c] || []).filter((r) => D.recipes[r].o[0][0] === c);
 function recipeValues(c) {
-  const opts = D.opts[c] || [], std = D.std[c], raw = D.items[c].raw;
-  return (raw || !std ? [""] : []).concat(opts, !raw && std ? [""] : []);
+  const std = D.std[c], raw = D.items[c].raw;
+  return (raw || !std ? [""] : []).concat(mainOpts(c), !raw && std ? [""] : []);
 }
 function recipeSelect(c, id) {
-  if (!(D.opts[c] || []).length) return "";
+  if (!mainOpts(c).length) return "";
   const cur = recipeOf(c) || "", L = recipeLabel(c, cur);
   return `<button type="button" class="rpick${L.tag === "alt" ? " alt" : ""}" id="${id}" data-rpick="${c}" aria-haspopup="listbox" aria-expanded="false" aria-label="Recette pour ${esc(name(c))} : ${esc(L.name)}">${L.m ? mIcon(L.m) : icon(c, "sm")}${L.tag === "alt" ? '<span class="tag alt">Alt.</span>' : ""}<span class="rp-txt">${esc(L.name)}</span><span class="rp-chev" aria-hidden="true">▾</span></button>`;
 }
@@ -1813,7 +1816,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip();
 fetch("assets/data.json").then((r) => r.json()).then((data) => {
   D = data;
   for (const f of FS.list) {               // drop parts and recipes this version of the data does not know
-    for (const c in f.choices) if (!D.items[c] || (f.choices[c] && !D.recipes[f.choices[c]])) delete f.choices[c];
+    // unknown parts or recipes, and by-product recipes saved before they left the menu (recipeValues)
+    for (const c in f.choices) if (!D.items[c] || (f.choices[c] && !recipeValues(c).includes(f.choices[c]))) delete f.choices[c];
     f.goals = f.goals.filter((g) => D.items[g.c]);
   }
   bindFactory(); saveFS();

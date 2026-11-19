@@ -2,7 +2,7 @@
 
 `#usine:ModularFrameHeavy*2,AluminumIngot*60;IronIngot=Alternate_PureIronIngot,Water=;Stone=MinerMk3.Pure,OreIron=Impure`
 
-- Avant `;` : les objectifs `pièce*débit` (débit en notation décimale à point, 2 décimales). Après : les recettes choisies `pièce=recette`, une recette vide signifiant « fourni de l'extérieur » (ou « ressource brute » pour une ressource). Seuls les choix qui diffèrent de la recette par défaut sont écrits.
+- Avant `;` : les objectifs `pièce*débit` (débit en notation décimale à point, 2 décimales). Après : les recettes choisies `pièce=recette`, une recette vide signifiant « fourni de l'extérieur » (ou « ressource brute » pour une ressource). Seuls les choix qui diffèrent de la recette par défaut sont écrits. Un choix absent du menu de recettes (recette inconnue, ou recette dont la pièce n'est qu'un sous-produit) est ignoré à l'ouverture.
 - Après un second `;` (optionnel, ajouté en novembre 2026) : les réglages d'extraction `ressource=Extracteur.Pureté`, l'un ou l'autre pouvant manquer (`Stone=MinerMk3`, `OreIron=Impure`). Extracteurs : classe sans `Build_` ni `_C` (`MinerMk1`, `MinerMk2`, `MinerMk3`, `OilPump`, `WaterPump`, `FrackingExtractor`) ; puretés : `Impure`, `Pure` (`Normal` n'est pas écrit). Sans réglage de recette, la partie du milieu est vide : `#usine:ModularFrameHeavy*2;;Stone=MinerMk3.Pure`. Les anciens liens (une ou deux parties) restent lus.
 - Les classes du jeu perdent leur préfixe `Desc_` / `Recipe_` et leur suffixe `_C` quand elles les ont ; sinon la classe complète est écrite.
 - Le lien porte une seule usine : « Partager » écrit l'usine active.

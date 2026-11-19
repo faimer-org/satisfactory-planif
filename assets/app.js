@@ -581,7 +581,7 @@ function treeNode(k, q, depth, path, sc) {   // sc: tree scope, "t" (Arbres tab)
   if (made <= EPS) return `<div class="leaf">${lab}<span class="rest">entièrement couvert, rien à fabriquer</span></div>`;
   const R = D.recipes[r], n = made / perMin(r, k, "o"), p = path.concat(k).join(",");
   const st = treeOpen.get(sc + "|" + p), open = st === undefined ? depth === 0 : st;   // by default only the first level below a tree is shown
-  return `<details data-k="${k}" data-q="${made}" data-d="${depth}" data-s="${sc}" data-p="${p}"${open ? " open" : ""}><summary><span class="row">${lab}<span class="mk">${mIcon(R.m)}<span class="num q">${fmt(n)} × ${esc(mName(R.m))}</span>${R.alt ? '<span class="tag alt" data-tip="Recette alternative, débloquée avec un disque dur">Alt.</span>' : ""}</span>${rec > EPS ? `<span class="rest">pour les <span class="num">${fmt(made)}${unit(k)}/min</span> restants</span>` : ""}</span></summary>${open ? treeKids(k, made, depth, path.concat(k), sc) : ""}</details>`;
+  return `<details data-k="${k}" data-q="${made}" data-d="${depth}" data-s="${sc}" data-p="${p}"${open ? " open" : ""}><summary><span class="row">${lab}<span class="mk">${mIcon(R.m)}<span class="num q">${fmt(n)} × ${esc(mName(R.m))}</span></span>${rec > EPS ? `<span class="rest">pour les <span class="num">${fmt(made)}${unit(k)}/min</span> restants</span>` : ""}</span></summary>${open ? treeKids(k, made, depth, path.concat(k), sc) : ""}</details>`;
 }
 function treeKids(k, q, depth, path, sc) {
   const r = recipeOf(k), R = D.recipes[r], n = q / perMin(r, k, "o");

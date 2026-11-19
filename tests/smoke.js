@@ -367,15 +367,14 @@ function checkImages() {
     }
 
     // Recipe menu: each non-standard recipe shows its output per machine compared with the standard one, like the
-    // item sheet; the trees do not (Alt. only). Iron ingot, standard 1 / 2 s = 30/min per Smelter: basic 50/min (×1,67),
+    // item sheet; the trees show neither this tag nor Alt. Iron ingot, standard 1 / 2 s = 30/min per Smelter: basic 50/min (×1,67),
     // alloy 75/min (×2,5), leached 100/min (×3,33), pure 13 / 12 s = 65/min (×2,17).
     {
       const { page, errors } = await open(browser, { "sp-factory": [{ c: "Desc_IronIngot_C", rate: 65 }, { c: "Desc_IronPlate_C", rate: 20 }],
         "sp-choice-f": { Desc_IronIngot_C: "Recipe_Alternate_PureIronIngot_C" }, "sp-tab-f": "tree" }, "#usine");
       await page.waitForSelector(".tree details", { timeout: 10000 });
-      const inTree = await page.$$eval(".tree .tag", (ts) => ts.filter((t) => /machine|standard/.test(t.textContent)).length);
-      const alt = await page.$$eval(".tree > details > summary .mk .tag.alt", (ts) => ts.length);
-      check(inTree === 0 && alt === 1, `Arbres · pas de gain par machine (${inTree}), Alt. sur le Lingot de fer pur (${alt})`);
+      const inTree = await page.$$eval(".tree .tag", (ts) => ts.filter((t) => /machine|standard|^Alt\./.test(t.textContent)).length);
+      check(inTree === 0, `Arbres · ni gain par machine ni Alt. sur le Lingot de fer pur (${inTree} pastille)`);
       await page.click("#goal-r-Desc_IronIngot_C");
       await page.waitForSelector("#rmenu .ropt", { timeout: 10000 });
       const menu = await page.$$eval("#rmenu .ropt", (os) => os.map((o) => {

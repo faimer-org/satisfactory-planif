@@ -49,6 +49,7 @@ for s in EN['FGSchematic']:
     for r in re.findall(r'\.(Recipe_\w+?_C)', json.dumps(s.get('mUnlocks', ''))):
         unlock[r].add(s['mType'])
 
+conv = lambda s: [[k, int(a) / 1000 if fluid(k) else int(a)] for k, a in PAIR.findall(s)]
 recipes = {}
 for c in EN['FGRecipe']:
     prod_in = re.findall(r'\.(Build_\w+?_C)', c.get('mProducedIn', ''))
@@ -56,7 +57,6 @@ for c in EN['FGRecipe']:
     if not m:
         continue
     t = float(c['mManufactoringDuration'])
-    conv = lambda s: [[k, int(a) / 1000 if fluid(k) else int(a)] for k, a in PAIR.findall(s)]
     ins, outs = conv(c['mIngredients']), conv(c['mProduct'])
     if not outs:
         continue
@@ -94,9 +94,23 @@ for item in sorted(used):
     if item in STD_PICK:
         std[item] = STD_PICK[item]
         continue
-    ok = [rid for rid in cands if not recipes[rid]['alt'] and 'Unpackage' not in rid]
+    # A by-product is never a default: it would make the part depend on another part's chain (Compacted Coal from
+    # Ionized Fuel needed Power Shards). Without a standard recipe whose main output is the part, the default is its
+    # first alternate recipe with that main output, or nothing (Dissolved Silica: by-product of an alternate only).
+    main = [rid for rid in cands if recipes[rid]['o'][0][0] == item and 'Unpackage' not in rid]
+    ok = [rid for rid in main if not recipes[rid]['alt']] or main
     if ok:
         std[item] = ok[0]
+
+# Standard recipes made by hand at the Equipment Workshop, kept only for parts with no standard machine recipe
+# (Portable Miner: 2 Iron Plate + 4 Iron Rod). The sheet mentions them; they are never planned.
+workshop = {}
+for c in EN['FGRecipe']:
+    if 'BP_WorkshopComponent' not in c.get('mProducedIn', '') or c['ClassName'] in recipes or '_Alternate_' in c['ClassName']:
+        continue
+    outs = conv(c['mProduct'])
+    if len(outs) == 1 and outs[0][0] in std and recipes[std[outs[0][0]]]['alt']:
+        workshop[outs[0][0]] = conv(c['mIngredients'])
 
 # Extractors of raw resources (Mon usine counts them). Rate = per minute at 100 % on a normal node (fluids in m³).
 # Miners take every solid resource; pumps and well extractors list their resources (mAllowedResources).
@@ -134,13 +148,15 @@ for c in sorted(used):
                sink=int(it.get('mResourceSinkPoints', '0') or 0), cat=cat, st=int(it.get('mCachedStackSize', '0') or 0))
     if cat.startswith('FICSMAS'):
         rec['ev'] = True
+    if c in workshop:
+        rec['ws'] = workshop[c]
     items[c] = rec
 
 data = dict(
     meta=dict(title='Satisfactory – données de production',
               source='Fichiers du jeu CommunityResources/Docs (en-US.json, fr.json)',
               icons='Icônes 64 px issues du projet SatisfactoryTools (ressources du jeu, © Coffee Stain Studios)',
-              format={'items': 'classe -> {en, fr, fl (fluide), raw (ressource brute), ico, sink, cat, st (taille de pile ; fluides en litres), ev (FICSMAS)}',
+              format={'items': 'classe -> {en, fr, fl (fluide), raw (ressource brute), ico, sink, cat, st (taille de pile ; fluides en litres), ev (FICSMAS), ws (recette standard de l\'atelier, sans recette standard en machine)}',
                       'recipes': 'classe -> {en, fr, alt, m (machine), t (s par cycle), mw (MW moyens à 100 %), i/o: [[objet, quantité par cycle]] ; fluides en m³}',
                       'std': 'objet -> recette par défaut', 'opts': 'objet -> toutes les recettes qui le produisent',
                       'machines': 'classe -> nom français', 'cats': 'ordre des catégories du catalogue',

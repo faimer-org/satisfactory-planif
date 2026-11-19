@@ -27,6 +27,14 @@ const FACTORY_CASES = [
   // 26,67 raw quartz. Same raw totals as satisfactory-calculator.com for this target.
   { name: "Sculptrice biochimique 2/min : lingot de ficsite à l'aluminium par défaut", factory: [{ c: "Desc_SpaceElevatorPart_10_C", rate: 2 }],
     expect: { "Minerai de fer": 262.5, "É.M.E.": 106.67, "Bauxite": 53.33, "Quartz brut": 26.67, "Charbon": 139.17, "Eau": 63.33 } },
+  // Rocket Fuel 100 m³/min: 1 Blender (6 turbofuel + 1 nitric acid → 10 rocket fuel + 1 compacted coal per 6 s) needs 60 m³
+  // turbofuel, 10 m³ nitric acid and gives 10 compacted coal. Turbofuel by default = Alt. Turbocarburant (6 fuel + 4 compacted
+  // coal → 5 per 16 s): 60/18,75 = 3,2 refineries → 72 m³ fuel, 48 compacted coal, minus the 10 recovered = 38 → Alt. Charbon
+  // compacté: 38 coal + 38 sulfur. Fuel (6 oil → 4 fuel + 3 resin per 6 s): 108 m³ oil. Nitric acid (12 nitrogen + 3 water
+  // + 1 iron plate → 3 per 6 s): 40 m³ nitrogen, 10 m³ water, 3,33 plates → 5 iron ingots → 5 ore.
+  { name: "Carburant de fusée 100 m³/min : turbocarburant et charbon compacté en recette alternative par défaut",
+    factory: [{ c: "Desc_RocketFuel_C", rate: 100 }],
+    expect: { "Pétrole brut": 108, "Azote": 40, "Charbon": 38, "Soufre": 38, "Eau": 10, "Minerai de fer": 5 } },
 ];
 
 // Extraction (Mon usine): default extractor = the smallest that covers the need alone on the node (normal by default:
@@ -424,6 +432,59 @@ function checkImages() {
       check(s.list.length === 1 && f.name === "1" && f.goals[0].rate === 30 && f.choices.Desc_IronIngot_C === "Recipe_Alternate_PureIronIngot_C" && f.ext.Desc_OreIron_C.p === "Pure" && f.via.Desc_OreIron_C === "train",
         `Usines · reprise de l'ancienne usine : ${JSON.stringify(s)}`);
       if (errors.length) check(false, `Usines (reprise) · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // Compacted Coal: no standard recipe makes it as main output (by-product of Rocket Fuel and Ionized Fuel, or
+      // Alt. Charbon compacté: 5 coal + 5 sulfur → 5 per 12 s = 25/min in an Assembler). Badge and message instead of
+      // "Fabriqué dans"; adding it uses the alternate, without a recipe list.
+      const { page, errors } = await open(browser, { "sp-qmode": "machine" }, "#desc-compactedcoal-c");
+      await page.waitForSelector(".head [data-quickadd]", { timeout: 10000 });
+      const badge = await page.$eval(".head h2 .tag", (e) => e.textContent.trim()).catch(() => "absent");
+      const note = await page.$eval(".head + section .note", (e) => e.textContent.trim());
+      const groups = await page.$$eval("details.others summary", (els) => els.map((e) => e.textContent.trim()));
+      const wantNote = "Aucune recette standard ne fabrique cette pièce en produit principal. Elle sort en sous-produit de 2 recettes standard, ou se fabrique directement avec une recette alternative. « Ajouter à mon usine » utilise cette recette alternative.";
+      check(badge === "Sous-produit" && note === wantNote && JSON.stringify(groups) === JSON.stringify(["Autres recettes · 1", "Obtenu en sous-produit · 4"]),
+        `Fiche Charbon compacté · badge « ${badge} », message « ${note} », groupes ${JSON.stringify(groups)}`);
+      await page.click(".head [data-quickadd]");
+      const list = await page.$$eval("#modal .rlist .ropt", (els) => els.length);
+      const mach = await page.$eval("#add-mach", (e) => e.textContent.trim());
+      const pre = await page.$eval("#add-rate", (i) => i.value);
+      await page.click("#modal [data-maction]");
+      const saved = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("sp-factories")).list[0].choices));
+      check(list === 0 && mach === "1 Assembleuse (recette alternative) produit 25/min" && pre === "25" && saved === "{}",
+        `Ajouter Charbon compacté · liste de recettes ${list}, « ${mach} », pré-rempli ${pre}, choix enregistrés ${saved}`);
+      if (errors.length) check(false, `Fiche Charbon compacté · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // Blue Power Slug: everything that depends on it goes through the Power Shard; Compacted Coal no longer does
+      const { page, errors } = await open(browser, {}, "#desc-crystal-c");
+      await page.waitForSelector("#ulist .chip", { timeout: 10000 });
+      const deps = await page.$$eval("#ulist .chip", (els) => [...new Set(els.map((e) => e.textContent.trim()))].sort());
+      const want = ["Carburant ionisé", "Carburant ionisé conditionné", "Matrice de charge extraterrestre", "Éclat de charge"].sort();
+      check(JSON.stringify(deps) === JSON.stringify(want), `Électrolimace bleue · utilisé dans : attendu ${JSON.stringify(want)}, obtenu ${JSON.stringify(deps)}`);
+      if (errors.length) check(false, `Électrolimace bleue · erreurs JS : ${errors.join(" | ")}`);
+      await page.close();
+    }
+    {
+      // Turbofuel: no standard recipe, 3 alternates (per machine: Turbocarburant 5 / 16 s = 18,75 m³/min, mélangé
+      // 45 m³/min, lourd 30 m³/min). The dialog asks which one; the choice goes to the factory, the rate follows it.
+      const { page, errors } = await open(browser, { "sp-qmode": "machine" }, "#desc-liquidturbofuel-c");
+      await page.waitForSelector(".head [data-quickadd]", { timeout: 10000 });
+      await page.click(".head [data-quickadd]");
+      const opts = await page.$$eval("#modal .rlist .ropt", (els) => els.map((e) => e.querySelector(".ro-nm").textContent + (e.getAttribute("aria-selected") === "true" ? "*" : "")).join(","));
+      const pre = await page.$eval("#add-rate", (i) => i.value);
+      await page.click('#modal .ropt[data-val="Recipe_Alternate_TurboBlendFuel_C"]');
+      const pre2 = await page.$eval("#add-rate", (i) => i.value);
+      const mach = await page.$eval("#add-mach", (e) => e.textContent.trim());
+      await page.click("#modal [data-maction]");
+      const f = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("sp-factories")).list[0]));
+      const wantF = '{"id":1,"name":"1","goals":[{"c":"Desc_LiquidTurboFuel_C","rate":45}],"choices":{"Desc_LiquidTurboFuel_C":"Recipe_Alternate_TurboBlendFuel_C"},"ext":{},"via":{}}';
+      check(opts === "Turbocarburant*,Turbocarburant mélangé,Turbocarburant lourd" && pre === "18,75" && pre2 === "45"
+        && mach === "1 Mélangeur (recette alternative) produit 45 m³/min" && f === wantF,
+        `Ajouter Turbocarburant · recettes ${opts}, pré-rempli ${pre} puis ${pre2}, « ${mach} », usine ${f}`);
+      if (errors.length) check(false, `Ajouter Turbocarburant · erreurs JS : ${errors.join(" | ")}`);
       await page.close();
     }
     {

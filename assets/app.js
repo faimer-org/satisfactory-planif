@@ -38,6 +38,12 @@ const icon = (c, cls = "") => D.items[c] && D.items[c].ico
   ? `<img class="ico ${cls}" src="assets/images/items/${c}.png" alt="" loading="lazy" width="64" height="64">`
   : `<span class="ico ph ${cls}" aria-hidden="true"></span>`;
 const recipeOf = (c) => (Object.prototype.hasOwnProperty.call(choice, c) ? choice[c] || null : D.std[c] || null);
+/* Parts with no standard machine recipe whose main output is the part: their default (D.std) is an alternate recipe,
+   or there is none. A by-product is never a default. mainAlts: the alternates that make the part as main output. */
+const noStd = (c) => !D.items[c].raw && (!D.std[c] || D.recipes[D.std[c]].alt);
+const mainAlts = (c) => (D.opts[c] || []).filter((r) => D.recipes[r].alt && D.recipes[r].o[0][0] === c);
+const bypOf = (c) => (D.opts[c] || []).filter((r) => D.recipes[r].o[0][0] !== c);
+const isByp = (c) => noStd(c) && bypOf(c).length > 0;
 const perMin = (r, c, side) => { const R = D.recipes[r]; const e = R[side].find((x) => x[0] === c); return e ? e[1] * 60 / R.t : 0; };
 const mName = (m) => D.machines[m] || m;
 const mIcon = (m) => `<img class="ico sm mico" src="assets/images/machines/${m}.png" alt="" loading="lazy" width="64" height="64">`;
@@ -356,7 +362,7 @@ function recipeSelect(c, id) {
   const cur = recipeOf(c) || "", L = recipeLabel(c, cur);
   return `<button type="button" class="rpick${L.tag === "alt" ? " alt" : ""}" id="${id}" data-rpick="${c}" aria-haspopup="listbox" aria-expanded="false" aria-label="Recette pour ${esc(name(c))} : ${esc(L.name)}">${L.m ? mIcon(L.m) : icon(c, "sm")}${L.tag === "alt" ? '<span class="tag alt">Alt.</span>' : ""}<span class="rp-txt">${esc(L.name)}</span><span class="rp-chev" aria-hidden="true">▾</span></button>`;
 }
-function optionHtml(c, r, cur, idx) {
+function optionHtml(c, r, cur, idx, curTag = true) {
   const L = recipeLabel(c, r);
   let body;
   if (r) {
@@ -366,7 +372,7 @@ function optionHtml(c, r, cur, idx) {
       <div class="ro-flow"><div class="ro-col">${R.i.map((e) => it(e)).join("")}</div><span class="ro-arrow" aria-hidden="true">→</span><div class="ro-col">${R.o.map((e) => it(e, e[0] === c)).join("")}</div></div>`;
   } else body = `<div class="ro-mach"><span>${D.items[c].raw ? "Ressource à amener, aucune machine." : "Arrive de l'extérieur, non calculée."}</span></div>`;
   const tag = L.tag === "std" ? '<span class="tag std">Standard</span>' : L.tag === "alt" ? '<span class="tag alt">Alt.</span>' : "";
-  return `<div class="ropt" role="option" id="ro-${idx}" data-val="${r}" aria-selected="${r === cur}" tabindex="-1"><div class="ro-name">${tag}<span class="ro-nm">${esc(L.name)}</span>${r ? speedTag(c, r) : ""}${r === cur ? '<span class="ro-cur">Utilisée</span>' : ""}</div>${body}</div>`;
+  return `<div class="ropt" role="option" id="ro-${idx}" data-val="${r}" aria-selected="${r === cur}" tabindex="-1"><div class="ro-name">${tag}<span class="ro-nm">${esc(L.name)}</span>${r ? speedTag(c, r) : ""}${r === cur && curTag ? '<span class="ro-cur">Utilisée</span>' : ""}</div>${body}</div>`;
 }
 /* custom listbox for recipes */
 const rmenu = document.createElement("div");
@@ -664,7 +670,7 @@ const outTxt = (c, r) => { const R = D.recipes[r]; return `${fmt(R.o.find(([o]) 
 const outOf = (c, r) => { const R = D.recipes[r]; return R.o.find(([o]) => o === c)[1] * 60 / R.t; };
 function speedTag(c, r) {             // machine output compared with the standard recipe
   const std = D.std[c];
-  if (!std || std === r) return "";
+  if (!std || std === r || noStd(c)) return "";   // no standard recipe to compare with
   const k = outOf(c, r) / outOf(c, std);
   if (Math.abs(k - 1) < 0.005) return ` <span class="tag" data-tip="Une machine produit autant qu'avec la recette standard">= standard</span>`;
   const up = k > 1;
@@ -694,18 +700,34 @@ function recipeCard(c, r) {
     <div class="rc-flow"><div class="chips">${qChips(c, r, R.i)}</div>${byp.length ? `<div class="rc-byp"><span>Produit aussi :</span><div class="chips">${qChips(c, r, byp)}</div></div>` : ""}${rawLine(c, r)}</div>
   </div>`;
 }
+/* "Fabriqué dans" of a part with no standard machine recipe: why, and where it comes from (recipes listed below) */
+function noStdNote(c) {
+  const it = D.items[c], P = it.fl ? "ce fluide" : "cette pièce", E = it.fl ? "Il" : "Elle";
+  const byp = bypOf(c), bs = byp.filter((r) => !D.recipes[r].alt).length, k = mainAlts(c).length;
+  const alts = k === 1 ? "une recette alternative" : `${k} recettes alternatives`, direct = k ? `, ou se fabrique directement avec ${alts}` : "";
+  let t = bs ? `Aucune recette standard ne fabrique ${P} en produit principal. ${E} sort en sous-produit de ${bs === 1 ? "1 recette" : bs + " recettes"} standard${direct}.`
+    : byp.length ? `Aucune recette standard ne fabrique ${P}. ${E} ne sort qu'en sous-produit de recettes alternatives${direct}.`
+    : `Aucune recette standard ne fabrique ${P} en machine. ${E} se fabrique avec ${alts}.`;
+  if (k === 1) t += " « Ajouter à mon usine » utilise cette recette alternative.";
+  else if (k > 1) t += " « Ajouter à mon usine » vous demande laquelle utiliser.";
+  let h = `<p class="note" style="margin:0">${esc(t)}</p>`;
+  if (it.ws) h += `<p class="note" style="margin:10px 0 6px">Sa recette standard se fabrique à la main, à l'atelier d'équipement, pour 1 ${it.fl ? "m³" : "pièce"} :</p><div class="chips">` +
+    it.ws.map(([x, a]) => `<button class="chip" data-pick="${x}">${icon(x, "sm")}<span class="num qn">${fmt(a)}${unit(x)}</span>${esc(name(x))}</button>`).join("") + `</div>`;
+  return h;
+}
 function renderItem() {
-  const c = sel, it = D.items[c], r = D.std[c];
-  const others = (D.opts[c] || []).filter((x) => x !== r);
+  const c = sel, it = D.items[c], ns = noStd(c), r = D.std[c];
+  const others = (D.opts[c] || []).filter((x) => ns || x !== r);   // no standard recipe: its alternate default is listed below too
   let h = modeBar() + `<div class="card">
     <section class="head">${icon(c, "lg")}
       <div><div class="eyebrow">${esc(it.cat)}${r ? ` · ${lvlOf(c) + 1} étape${lvlOf(c) ? "s" : ""} depuis les ressources brutes` : it.raw ? " · ressource brute" : ""}</div>
-      <h2>${esc(it.fr)}</h2><div class="en">${esc(it.en)}</div></div>
+      <h2>${esc(it.fr)}${isByp(c) ? ` <span class="tag byp" data-tip="S'obtient en sous-produit d'autres recettes : aucune recette standard n'en fait son produit principal">Sous-produit</span>` : ""}</h2><div class="en">${esc(it.en)}</div></div>
       ${r ? `<button class="btn primary" data-quickadd="${c}" aria-haspopup="dialog" data-tip="Choisir le débit et l'usine ; si la pièce y est déjà, son débit augmente d'autant">+ Ajouter à mon usine</button>` : ""}
     </section>
     <section><div class="sec-head"><h3 class="uh" style="margin:0">Fabriqué dans</h3>${(D.opts[c] || []).length ? `<div class="seg" role="group" aria-label="Quantités affichées">
         <button class="segb" data-qmode="unit" aria-pressed="${qMode === "unit"}">Pour 1 ${D.items[c].fl ? "m³" : "pièce"}</button><button class="segb" data-qmode="machine" aria-pressed="${qMode === "machine"}">Pour 1 machine/min</button></div>` : ""}</div>`;
-  if (r) {
+  if (ns) h += noStdNote(c);
+  else if (r) {
     const R = D.recipes[r];
     const byp = R.o.filter(([o]) => o !== c);
     h += `<div class="made">${mIcon(R.m).replace('ico sm', 'ico')}<div><b>${esc(mName(R.m))}</b><div class="note" style="margin:0">Recette standard${R.fr !== it.fr ? ` « ${esc(R.fr)} »` : ""} · 1 machine produit <span class="num">${outTxt(c, r)}</span></div></div></div>
@@ -713,7 +735,6 @@ function renderItem() {
       ${byp.length ? `<div class="rc-byp" style="margin-top:8px"><span>Produit aussi :</span><div class="chips">${qChips(c, r, byp)}</div></div>` : ""}
       <div style="margin-top:8px">${rawLine(c, r)}</div>`;
   } else if (it.raw) h += `<p class="note" style="margin:0">Ressource brute : elle s'extrait d'un gisement et ne se fabrique dans aucune machine.</p>`;
-  else h += `<p class="note" style="margin:0">Aucune recette standard : ${others.length ? "elle ne s'obtient qu'avec les recettes ci-dessous." : "elle ne se fabrique pas en machine."}</p>`;
   h += `</section>`;
   // recipes whose main output is c, then recipes of other parts that also give c (by-product)
   const mains = others.filter((x) => D.recipes[x].o[0][0] === c), byps = others.filter((x) => D.recipes[x].o[0][0] !== c);
@@ -1224,21 +1245,43 @@ function modalMsg(id, txt, bad) {
 
 /* "+ Ajouter à mon usine" (part sheet and catalogue): rate and factory. The rate starts at 1/min, or at the output of
    1 machine (standard recipe) when the sheet shows "Pour 1 machine/min". */
+/* A part with no standard recipe and several alternates that make it (Turbocarburant): the dialog lists them, as the
+   recipe menu of Mon usine does, and the one picked becomes the recipe choice of the destination factory. */
 function openAddDialog(c) {
-  const r = D.std[c];
+  let r = D.std[c];
   if (!r) return;
-  const perM = outOf(c, r), u = unit(c);
-  const rate0 = qMode === "machine" ? clampRate(perM) : 1;
+  const alts = noStd(c) ? mainAlts(c) : [], pick = alts.length > 1, u = unit(c);
+  const machTxt = (x) => `1 ${esc(mName(D.recipes[x].m))} (recette ${D.recipes[x].alt ? "alternative" : "standard"}) produit <span class="num">${fmt(outOf(c, x))}${u}/min</span>`;
+  const rate0 = qMode === "machine" ? clampRate(outOf(c, r)) : 1;
   let v = rate0;
   openModal({ title: "Ajouter à mon usine", inline: true,
-    body: `<div class="addhead">${icon(c)}<div><b>${esc(name(c))}</b><small>1 ${esc(mName(D.recipes[r].m))} (recette standard) produit <span class="num">${fmt(perM)}${u}/min</span></small></div></div>
+    body: `<div class="addhead">${icon(c)}<div><b>${esc(name(c))}</b><small id="add-mach">${machTxt(r)}</small></div></div>
+      ${pick ? `<div class="add-rec"><div class="lbl" id="add-rec-lbl">Recette</div>
+        <p class="note">Aucune recette standard ne fabrique ${D.items[c].fl ? "ce fluide" : "cette pièce"} en machine : choisissez la recette alternative à utiliser dans l'usine. Vous pourrez la changer ensuite dans Mon usine.</p>
+        <div class="rlist" role="listbox" aria-labelledby="add-rec-lbl">${alts.map((x, i) => optionHtml(c, x, r, "a" + i, false).replace('tabindex="-1"', 'tabindex="0"')).join("")}</div></div>` : ""}
       <label class="afield"><span>Débit voulu</span><span class="g-rate"><input id="add-rate" type="text" inputmode="decimal" autocomplete="off" value="${fmtIn(rate0)}" aria-describedby="add-msg"> <span class="num">${u.trim()} / min</span></span></label>
       ${FS.list.length ? destHtml(FS.cur) : ""}
       <p class="immsg" id="add-msg" aria-live="polite"></p>`,
     actions: [{ label: "Ajouter", kind: "primary",
       check: () => { const ok = addCheck(c, true); if (ok) v = clampRate(parseNum(document.getElementById("add-rate").value)); return ok; },
-      run: () => { destApply(); afterAdd(c, addGoal(c, v)); } }] });
+      run: () => {
+        destApply();
+        if (pick) { if (r === D.std[c]) delete choiceF[c]; else choiceF[c] = r; }   // saved with the goal (addGoal)
+        afterAdd(c, addGoal(c, v));
+      } }] });
   const inp = document.getElementById("add-rate");
+  const choose = (o) => {
+    const prev = r;
+    r = o.dataset.val;
+    modal.querySelectorAll(".rlist .ropt").forEach((x) => x.setAttribute("aria-selected", x === o));
+    document.getElementById("add-mach").innerHTML = machTxt(r);
+    // the rate still shows the output of 1 machine with the previous recipe: follow the new one
+    if (qMode === "machine" && parseNum(inp.value) === clampRate(outOf(c, prev))) { inp.value = fmtIn(clampRate(outOf(c, r))); addCheck(c, false); }
+  };
+  modal.querySelectorAll(".rlist .ropt").forEach((o) => {
+    o.addEventListener("click", () => choose(o));
+    o.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); choose(o); } });
+  });
   dest.changed = (extra) => addCheck(c, false, extra);
   inp.addEventListener("input", () => { sanitizeDec(inp); if (parseNum(inp.value) > MAX_RATE) inp.value = fmtIn(MAX_RATE); addCheck(c, false); });
   inp.addEventListener("blur", () => { if (!(parseNum(inp.value) > 0)) { inp.value = fmtIn(rate0); addCheck(c, false); } });   // never left empty
@@ -1697,7 +1740,7 @@ modal.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Tab") {            // keep focus inside the dialog
-    const f = [...modal.querySelectorAll("button:not(:disabled), input")].filter((x) => x.offsetParent !== null);
+    const f = [...modal.querySelectorAll('button:not(:disabled), input, [tabindex="0"]')].filter((x) => x.offsetParent !== null);
     const i = f.indexOf(document.activeElement);
     if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
     else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }

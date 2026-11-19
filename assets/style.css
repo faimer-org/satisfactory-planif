@@ -119,6 +119,8 @@ td .mach { display: inline-block; min-width: 120px; }
 .tag.alt { color: var(--star); }
 .tag.raw { color: var(--down); }
 .tag.loop { color: var(--warn); }
+.tag.byp { color: var(--muted); }
+h2 .tag { font-size: 13px; vertical-align: middle; }
 .mach small { color: var(--muted); display: block; font-size: 14px; }
 .note { font-size: 15px; color: var(--muted); margin: 8px 0 0; }
 .tree { font-size: 16px; }
@@ -435,6 +437,9 @@ sup.fn { color: var(--rust); font: 600 12px/0 var(--mono); margin-left: 1px; }
 .addhead { display: flex; align-items: center; gap: 10px; }
 .addhead b { display: block; font-size: 18px; }
 .addhead small { color: var(--muted); font-size: 14px; }
+.add-rec .note { margin: 4px 0 8px; }
+.rlist { display: grid; gap: 4px; }
+.rlist .ropt[aria-selected="false"]:not(:hover):not(:focus) { border-color: var(--line); }
 #dest-warn { color: var(--warn); }
 #dest-warn:empty { display: none; }
 

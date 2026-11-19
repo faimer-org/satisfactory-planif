@@ -6,9 +6,9 @@ Source : `<installation Satisfactory>/CommunityResources/Docs/en-US.json` et `fr
 
 | Clé | Contenu |
 |---|---|
-| `items` | classe → `{en, fr, fl (fluide), raw (ressource brute), ico (icône présente), sink (points), cat, st (taille de pile ; fluides en litres), ev (FICSMAS, optionnel)}` |
+| `items` | classe → `{en, fr, fl (fluide), raw (ressource brute), ico (icône présente), sink (points), cat, st (taille de pile ; fluides en litres), ev (FICSMAS, optionnel), ws (recette standard de l'atelier d'équipement, optionnel)}` |
 | `recipes` | classe → `{en, fr, alt, m (machine), t (s/cycle), mw (MW moyens à 100 %), i, o}` ; `i`/`o` = `[[objet, quantité par cycle]]`, fluides en m³ |
-| `std` | objet → recette par défaut (absente pour les ressources brutes) |
+| `std` | objet → recette par défaut (absente pour les ressources brutes et pour les objets sans recette qui les produise en sortie principale) |
 | `opts` | objet → toutes les recettes qui le produisent, triées (standard d'abord) |
 | `machines` | classe de machine → nom français officiel |
 | `cats` | ordre des catégories du catalogue (se termine par « Autres », « FICSMAS (événement) ») |
@@ -19,6 +19,8 @@ Source : `<installation Satisfactory>/CommunityResources/Docs/en-US.json` et `fr
 - Seules les recettes fabriquées dans une machine de production sont gardées (pas l'atelier, pas les bâtiments).
 - **Alternative** : id contenant `_Alternate_`, ou recette débloquée uniquement par des schémas `EST_Alternate` (disques durs).
 - **Recette par défaut** : classement (alternative +100, produit secondaire +50, « Unpackage » +40, convertisseur produisant une ressource brute +30, nom différent de l'objet +1). Exception codée : Lingot de ficsite → `Recipe_FicsiteIngot_AL_C` (les trois recettes sont standard en 1.2 ; l'aluminium demande le moins d'É.M.E. par lingot, 8 contre 12 au caterium et 16 au fer, et c'est le choix de satisfactory-calculator.com).
+- **Jamais un sous-produit par défaut** : seules les recettes dont l'objet est la sortie principale peuvent être la recette par défaut. Sans recette standard de ce type, c'est la première recette alternative qui le fabrique en sortie principale, sinon aucune. Avant cette règle, le Charbon compacté avait pour défaut « Carburant ionisé » (dont il n'est qu'un sous-produit) et semblait dépendre de l'Électrolimace bleue. Concernés en 1.2 : Charbon compacté, Résine polymère, Résidus de pétrole lourd (défaut alternatif ; ils étaient en sous-produit de Carburant ionisé, Carburant et Plastique), Turbocarburant et Foreuse portable (défaut alternatif ; ils n'en avaient aucun), Silice dissoute (aucun : sous-produit d'une alternative seulement).
+- **`ws`** : pour un objet dont la recette par défaut est alternative, sa recette standard de l'atelier d'équipement (`BP_WorkshopComponent`), si elle existe : seulement affichée sur la fiche, jamais planifiée. En 1.2 : Foreuse portable (2 plaques de fer + 4 barres de fer).
 - **Puissance** des machines à puissance variable (accélérateur, convertisseur, encodeur) : `constante + facteur / 2` (moyenne).
 - **Extracteurs** : foreuses Mk.1 à Mk.3, Puit de pétrole, Pompe à eau, Extracteur de puits de ressources (+ Pressuriseur). Débit = `mItemsPerCycle / mExtractCycleTime × 60` (÷ 1 000 pour les fluides) ; ressources = `mAllowedResources` (toutes les ressources solides pour les foreuses). L'extracteur de puits n'est gardé que pour ce qu'aucun autre extracteur ne donne (azote). La Pompe à eau n'a pas de pureté (posée sur l'eau, pas sur un gisement).
 - Noms français : ceux du jeu (`fr.json`).
